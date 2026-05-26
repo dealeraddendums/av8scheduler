@@ -44,3 +44,7 @@ Online Scheduling App.zip
 .expo-shared/
 apps/ios/ios/Pods/
 apps/ios/android/build/
+
+# supabase CLI working files
+supabase/.temp/
+supabase/.branches/

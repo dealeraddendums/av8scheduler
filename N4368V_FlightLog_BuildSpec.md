@@ -19,7 +19,7 @@
 | DNS propagated | ✅ Done | All 6 resolvers → 13.56.240.152 |
 | SSL / certbot | ✅ Done | Let's Encrypt cert issued 2026-05-26, expires 2026-08-24, auto-renew scheduled; HTTP→HTTPS redirect active |
 | GitHub secrets | ✅ Done | EC2_IP + SSH_PRIVATE_KEY set on dealeraddendums/av8scheduler |
-| Supabase SQL run | ⏳ Pending | Run 001_flight_log.sql in dashboard |
+| Supabase SQL run | ✅ Done | 001_flight_log.sql executed in dashboard (2026-05-26) |
 | Supabase storage bucket | ⏳ Pending | Create flight-photos bucket (private) |
 | Supabase ANTHROPIC_API_KEY | ⏳ Pending | Add to Edge Function secrets |
 
@@ -299,7 +299,7 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 1a | Figma migration (strip deps, build clean) | ✅ Done |
 | 1b | Supabase schema + API routes | ✅ Done |
 | 1c | EC2 + nginx + DNS + SSL | ✅ Done |
-| 1d | GitHub Actions live deploy | ⏳ Secrets set; repo empty (push initial commit to enable workflow) |
+| 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26) |
 | 2 | Web: FlightLog tab + all components | ⏳ Not started |
 | 3 | iOS: Expo monorepo + all screens | ⏳ Not started |
 | 4 | TestFlight build + distribution | ⏳ Not started |
