@@ -1249,20 +1249,26 @@ app.get("/make-server-82b8c834/flights", async (c) => {
     const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 500);
     const offset = parseInt(c.req.query("offset") ?? "0", 10) || 0;
 
-    let query = supabase
-      .from("flights")
-      .select("*")
+    // Apply the equality filter BEFORE order/range — in supabase-js v2
+    // chaining .eq() onto a transform builder is supported, but applying
+    // filters first matches the documented pattern and avoids any builder
+    // quirks across versions.
+    let query = supabase.from("flights").select("*");
+    if (pilotId) query = query.eq("pilot_id", pilotId);
+    const { data, error } = await query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
-    if (pilotId) query = query.eq("pilot_id", pilotId);
-
-    const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      console.error("GET /flights supabase error:", error, "pilotId:", pilotId);
+      throw error;
+    }
+    console.log("GET /flights returning", (data ?? []).length, "rows; pilotId:", pilotId ?? "(none)");
     return c.json(data ?? []);
-  } catch (error) {
-    console.log("Error fetching flights:", error);
-    return c.json({ error: `Failed to fetch flights: ${error}` }, 500);
+  } catch (err) {
+    console.error("GET /flights error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to fetch flights: ${msg}` }, 500);
   }
 });
 

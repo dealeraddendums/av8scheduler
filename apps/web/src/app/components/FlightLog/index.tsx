@@ -41,11 +41,19 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
   const [addOpen, setAddOpen] = useState(false);
   const [maintOpen, setMaintOpen] = useState(false);
 
+  // Normalize pilot IDs. The /users endpoint may return IDs with a "user:"
+  // KV-key prefix (from PUT rewrites), while the flights table stores the
+  // raw "user1"/"user2"/"user3". Strip the prefix so filter buttons and
+  // color lookups in FlightList match flight rows.
   const pilots = useMemo(
     () =>
       users
         .filter((u) => u.userType !== 'spouse')
-        .map((u) => ({ id: u.id, name: u.name, color: u.color })),
+        .map((u) => ({
+          id: u.id.startsWith('user:') ? u.id.slice(5) : u.id,
+          name: u.name,
+          color: u.color,
+        })),
     [users]
   );
 
@@ -157,7 +165,10 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
           <AddFlightDialog
             open={addOpen}
             onOpenChange={setAddOpen}
-            currentUser={{ id: loggedInUser.id, name: loggedInUser.name }}
+            currentUser={{
+              id: loggedInUser.id.startsWith('user:') ? loggedInUser.id.slice(5) : loggedInUser.id,
+              name: loggedInUser.name,
+            }}
             pilots={pilots.map((p) => ({ id: p.id, name: p.name }))}
             isAdmin={isAdmin}
             destinations={destinationsHook.destinations}
@@ -167,7 +178,10 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
           <LogMaintenanceDialog
             open={maintOpen}
             onOpenChange={setMaintOpen}
-            currentUser={{ id: loggedInUser.id, name: loggedInUser.name }}
+            currentUser={{
+              id: loggedInUser.id.startsWith('user:') ? loggedInUser.id.slice(5) : loggedInUser.id,
+              name: loggedInUser.name,
+            }}
             oilSummary={flightsHook.totals?.oil_summary ?? null}
             onCreate={maintenanceHook.createEvent}
             onSaved={handleMaintenanceSaved}

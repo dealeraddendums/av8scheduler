@@ -34,14 +34,25 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
       const flightsPath = pilotIdFilter
         ? `/flights?pilot_id=${encodeURIComponent(pilotIdFilter)}`
         : '/flights';
+      console.log('[useFlights] fetching', flightsPath, '+ /flights/totals');
       const [flightsData, totalsData] = await Promise.all([
         apiGet<Flight[]>(flightsPath),
         apiGet<FlightTotals>('/flights/totals'),
       ]);
-      setFlights(flightsData);
+      console.log(
+        '[useFlights] response shape — flights:',
+        Array.isArray(flightsData) ? `array(${flightsData.length})` : typeof flightsData,
+        'totals:',
+        totalsData && typeof totalsData === 'object' ? 'object' : typeof totalsData
+      );
+      if (Array.isArray(flightsData) && flightsData.length > 0) {
+        console.log('[useFlights] first flight:', flightsData[0]);
+      }
+      setFlights(Array.isArray(flightsData) ? flightsData : []);
       setTotals(totalsData);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load flights';
+      console.error('[useFlights] fetch failed:', err);
       setError(msg);
       toast.error(msg);
     } finally {
