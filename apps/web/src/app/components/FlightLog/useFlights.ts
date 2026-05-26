@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { API_BASE, apiDelete, apiGet, apiPost } from './api';
-import { publicAnonKey } from '/utils/supabase/info';
-import type { Flight, FlightTotals, LastReading, NewFlightInput } from './types';
+import {
+  API_BASE,
+  SUPABASE_ANON_KEY,
+  apiDelete,
+  apiGet,
+  apiPost,
+} from '@av8/api';
+import type { Flight, FlightTotals, LastReading, NewFlightInput } from '@av8/api';
 
 interface UseFlightsResult {
   flights: Flight[];
@@ -85,7 +90,7 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
   const exportCSV = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(`${API_BASE}/flights/export?format=csv`, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       });
       if (!res.ok) throw new Error(`Export failed: ${res.status}`);
       const blob = await res.blob();

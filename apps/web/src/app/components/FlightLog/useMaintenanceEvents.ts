@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { apiGet, apiPost } from './api';
-import type { MaintenanceEvent, NewMaintenanceInput, OilSummary } from './types';
+import { apiGet, apiPost } from '@av8/api';
+import type { MaintenanceEvent, NewMaintenanceInput, OilSummary } from '@av8/api';
 
 interface UseMaintenanceEventsResult {
   events: MaintenanceEvent[];

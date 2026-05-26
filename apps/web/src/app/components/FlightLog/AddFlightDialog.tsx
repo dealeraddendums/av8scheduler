@@ -23,7 +23,7 @@ import {
 import { Checkbox } from '../ui/checkbox';
 import { Calendar as CalendarIcon, AlertTriangle, Check } from 'lucide-react';
 import { GaugeCapture } from './GaugeCapture';
-import type { Destination, Flight, LastReading, NewFlightInput } from './types';
+import type { Destination, Flight, LastReading, NewFlightInput } from '@av8/api';
 
 interface AddFlightDialogProps {
   open: boolean;

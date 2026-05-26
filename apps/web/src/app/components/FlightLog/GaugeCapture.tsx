@@ -4,8 +4,8 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Camera, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
-import { apiPost } from './api';
-import type { GaugeReading } from './types';
+import { apiPost } from '@av8/api';
+import type { GaugeReading } from '@av8/api';
 
 interface GaugeCaptureProps {
   onResult: (hobbs: number | null, tach: number | null) => void;

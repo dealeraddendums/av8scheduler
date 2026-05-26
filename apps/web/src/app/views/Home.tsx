@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Calendar as CalendarIcon, List, RefreshCw, BookOpen } from 'lucide-react';
 import { FlightLog } from '../components/FlightLog';
-import type { FlightTotals } from '../components/FlightLog/types';
+import type { FlightTotals } from '@av8/api';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { SlotInfo } from 'react-big-calendar';

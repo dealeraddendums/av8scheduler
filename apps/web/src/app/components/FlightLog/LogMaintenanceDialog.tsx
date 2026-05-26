@@ -14,7 +14,7 @@ import { Textarea } from '../ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { Calendar as CalendarIcon, AlertTriangle, Check, Droplet, ShieldCheck } from 'lucide-react';
-import type { MaintenanceEvent, NewMaintenanceInput, OilSummary } from './types';
+import type { MaintenanceEvent, NewMaintenanceInput, OilSummary } from '@av8/api';
 
 interface LogMaintenanceDialogProps {
   open: boolean;

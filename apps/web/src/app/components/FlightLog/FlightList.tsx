@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog';
 import { Trash2, Droplet, ShieldCheck } from 'lucide-react';
-import type { Destination, Flight, MaintenanceEvent } from './types';
+import type { Destination, Flight, MaintenanceEvent } from '@av8/api';
 
 interface FlightListProps {
   flights: Flight[];

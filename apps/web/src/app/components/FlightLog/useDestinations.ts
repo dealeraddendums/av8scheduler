@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { apiDelete, apiGet, apiPost } from './api';
-import type { Destination } from './types';
+import { apiDelete, apiGet, apiPost } from '@av8/api';
+import type { Destination } from '@av8/api';
 
 interface UseDestinationsResult {
   destinations: Destination[];

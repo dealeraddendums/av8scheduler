@@ -24,7 +24,7 @@ import {
   Save,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
-import type { Destination, Flight, FlightTotals, NewFlightInput } from './types';
+import type { Destination, Flight, FlightTotals, NewFlightInput } from '@av8/api';
 
 interface AdminPanelProps {
   isAdmin: boolean;

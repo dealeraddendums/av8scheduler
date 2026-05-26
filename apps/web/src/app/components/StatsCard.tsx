@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Clock, Calendar, TrendingUp, ChevronDown, ChevronUp, Plane } from 'lucide-react';
 import { Button } from './ui/button';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
-import type { FlightTotals } from './FlightLog/types';
+import type { FlightTotals } from '@av8/api';
 
 const FLIGHTS_API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-82b8c834`;
 
