@@ -248,7 +248,7 @@ Key native patterns:
 - Offline queue: AsyncStorage → retry on AppState foreground
 - Auth: expo-secure-store for PIN session (replaces cookie)
 
-app.json bundle ID: `com.allantone.n4368v`
+app.json bundle ID: `com.dealeraddendums.av8scheduler` (under Apple Developer account dealeraddendums@icloud.com)
 
 TestFlight: `eas build --platform ios --profile preview` → `eas submit`
 
@@ -301,8 +301,8 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 1c | EC2 + nginx + DNS + SSL | ✅ Done |
 | 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26) |
 | 2 | Web: FlightLog tab + all components | ✅ Done (2026-05-26) |
-| 3 | iOS: Expo monorepo + all screens | ⏳ Not started |
-| 4 | TestFlight build + distribution | ⏳ Not started |
+| 3 | iOS: Expo monorepo + all screens | ✅ Scaffolded (2026-05-26) — auth, navigation, FlightLog/AddFlight/LogMaintenance/Admin screens, offline queue. expo-doctor: 21/21 checks pass. |
+| 4 | TestFlight build + distribution | ⏳ Pending manual steps: `eas login`, `eas build --platform ios --profile preview`, App Store Connect app creation, `eas submit` |
 
 ---
 
