@@ -222,8 +222,9 @@ export function AdminPanel({
   const [addingDest, setAddingDest] = useState(false);
   const [pendingDeleteDest, setPendingDeleteDest] = useState<Destination | null>(null);
 
-  // Section C — Bulk Entry
-  const bulkPilots = useMemo(() => pilots.slice(0, 2), [pilots]);
+  // Section C — Bulk Entry. All pilots show in the toggle so admin can
+  // enter historical flights for any of them (Allan/Chip/Bob).
+  const bulkPilots = useMemo(() => pilots, [pilots]);
   const [bulkDate, setBulkDate] = useState<string>(todayIso());
   const [bulkPilotId, setBulkPilotId] = useState<string>(bulkPilots[0]?.id ?? '');
   const [bulkDestQuery, setBulkDestQuery] = useState<string>('');

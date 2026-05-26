@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Clock, Calendar, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from './ui/button';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
+
+const FLIGHTS_API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-82b8c834`;
 
 interface Booking {
   id: string;
@@ -43,10 +46,33 @@ export function StatsCard({ bookings, users }: StatsCardProps) {
         // Don't auto-collapse if user manually expanded on mobile
       }
     };
-    
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [isCollapsed]);
+
+  // Total Flight Hours card now reports Hobbs hours since the 2/15/26 annual.
+  // Fetches /flights/totals once on mount; falls back to 0.0 (NOT booking hours)
+  // on failure.
+  const [sinceAnnualHobbs, setSinceAnnualHobbs] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${FLIGHTS_API_BASE}/flights/totals`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const val = data?.since_annual_hobbs;
+        setSinceAnnualHobbs(typeof val === 'number' ? val : 0);
+      })
+      .catch(() => {
+        if (!cancelled) setSinceAnnualHobbs(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const now = new Date();
   
@@ -54,13 +80,6 @@ export function StatsCard({ bookings, users }: StatsCardProps) {
   const pilots = users.filter(user => user.userType !== 'spouse');
   
   const upcomingBookings = bookings.filter(b => new Date(b.startTime) >= now);
-  
-  const totalHours = bookings.reduce((acc, booking) => {
-    const start = new Date(booking.startTime);
-    const end = new Date(booking.endTime);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    return acc + hours;
-  }, 0);
 
   const userStats = pilots.map(user => {
     const userBookings = bookings.filter(b => b.userId === user.id);
@@ -131,9 +150,9 @@ export function StatsCard({ bookings, users }: StatsCardProps) {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{Math.round(totalHours * 10) / 10}</div>
+              <div className="text-2xl font-bold">{(sinceAnnualHobbs ?? 0).toFixed(1)}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Hours booked
+                Hobbs hrs since annual (2/15/26)
               </p>
             </CardContent>
           </Card>
