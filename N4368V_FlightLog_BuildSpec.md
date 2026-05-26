@@ -10,7 +10,7 @@
 |-------|--------|-------|
 | Figma deps removed | ✅ Done | vite.config.ts + Home.tsx + Settings.tsx cleaned |
 | Supabase migration SQL | ✅ Done | supabase/migrations/001_flight_log.sql |
-| API routes | ✅ Done | All routes in supabase/functions/server/index.tsx |
+| API routes | ✅ Done | All routes deployed as `make-server-82b8c834` (entrypoint `supabase/functions/make-server-82b8c834/index.ts`); verified 2026-05-26 |
 | nginx config | ✅ Done | deploy/nginx-n4368v.conf |
 | GitHub Actions | ✅ Done | .github/workflows/deploy.yml |
 | EC2 provisioned | ✅ Done | t3.micro us-west-1, Ubuntu 24.04 |
@@ -20,8 +20,8 @@
 | SSL / certbot | ✅ Done | Let's Encrypt cert issued 2026-05-26, expires 2026-08-24, auto-renew scheduled; HTTP→HTTPS redirect active |
 | GitHub secrets | ✅ Done | EC2_IP + SSH_PRIVATE_KEY set on dealeraddendums/av8scheduler |
 | Supabase SQL run | ✅ Done | 001_flight_log.sql executed in dashboard (2026-05-26) |
-| Supabase storage bucket | ⏳ Pending | Create flight-photos bucket (private) |
-| Supabase ANTHROPIC_API_KEY | ⏳ Pending | Add to Edge Function secrets |
+| Supabase storage bucket | ✅ Done | flight-photos (private) created 2026-05-26 |
+| Supabase ANTHROPIC_API_KEY | ✅ Done | Added to Edge Function secrets 2026-05-26 |
 
 ---
 
