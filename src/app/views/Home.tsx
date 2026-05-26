@@ -9,7 +9,8 @@ import { LoginDialog } from '../components/LoginDialog';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Plane, Calendar as CalendarIcon, List, RefreshCw, Settings, LogOut, User as UserIcon } from 'lucide-react';
+import { Plane, Calendar as CalendarIcon, List, RefreshCw, Settings, LogOut, User as UserIcon, BookOpen } from 'lucide-react';
+import { FlightLog } from '../components/FlightLog';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { SlotInfo } from 'react-big-calendar';
@@ -485,7 +486,7 @@ export default function Home() {
         {loggedInUser && <StatsCard bookings={bookings} users={users} />}
 
         <Tabs defaultValue="calendar" className="space-y-4 mt-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="calendar" className="gap-2">
               <CalendarIcon className="w-4 h-4" />
               Calendar
@@ -493,6 +494,10 @@ export default function Home() {
             <TabsTrigger value="list" className="gap-2">
               <List className="w-4 h-4" />
               Bookings
+            </TabsTrigger>
+            <TabsTrigger value="log" className="gap-2">
+              <BookOpen className="w-4 h-4" />
+              Flight Log
             </TabsTrigger>
           </TabsList>
 
@@ -526,6 +531,14 @@ export default function Home() {
               bookings={bookings}
               onDeleteBooking={handleDeleteBooking}
               onCreateBooking={handleCreateBookingFromList}
+            />
+          </TabsContent>
+
+          <TabsContent value="log">
+            <FlightLog
+              users={users}
+              loggedInUser={loggedInUser}
+              onRequestLogin={() => setLoginDialogOpen(true)}
             />
           </TabsContent>
         </Tabs>

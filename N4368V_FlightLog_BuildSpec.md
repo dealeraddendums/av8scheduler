@@ -300,7 +300,7 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 1b | Supabase schema + API routes | ✅ Done |
 | 1c | EC2 + nginx + DNS + SSL | ✅ Done |
 | 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26) |
-| 2 | Web: FlightLog tab + all components | ⏳ Not started |
+| 2 | Web: FlightLog tab + all components | ✅ Done (2026-05-26) |
 | 3 | iOS: Expo monorepo + all screens | ⏳ Not started |
 | 4 | TestFlight build + distribution | ⏳ Not started |
 
