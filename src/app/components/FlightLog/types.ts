@@ -24,6 +24,11 @@ export interface PilotTotals {
 export interface FlightTotals {
   total_hobbs: number;
   total_tach: number;
+  since_annual_hobbs: number;
+  since_annual_tach: number;
+  annual_date: string;
+  annual_hobbs: number;
+  annual_tach: number;
   by_pilot: PilotTotals[];
   oil_due_tach: number;
   current_tach: number;

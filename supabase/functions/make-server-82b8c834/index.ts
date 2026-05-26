@@ -15,6 +15,33 @@ const supabase = createClient(
 const OIL_DUE_TACH_KEY = "maintenance:oil_due_tach";
 const DEFAULT_OIL_DUE_TACH = 643;
 
+const ANNUAL_KEY = "maintenance:annual";
+const DEFAULT_ANNUAL = { date: "2026-02-15", hobbs: 4539.0, tach: 590.4 };
+
+type AnnualBaseline = { date: string; hobbs: number; tach: number };
+
+async function getAnnualBaseline(): Promise<AnnualBaseline> {
+  const stored = await kv.get(ANNUAL_KEY);
+  if (
+    stored &&
+    typeof stored === "object" &&
+    typeof (stored as { date?: unknown }).date === "string" &&
+    typeof (stored as { hobbs?: unknown }).hobbs === "number" &&
+    typeof (stored as { tach?: unknown }).tach === "number"
+  ) {
+    return stored as AnnualBaseline;
+  }
+  await kv.set(ANNUAL_KEY, DEFAULT_ANNUAL);
+  return DEFAULT_ANNUAL;
+}
+
+async function getOilDueTach(): Promise<number> {
+  const stored = await kv.get(OIL_DUE_TACH_KEY);
+  if (typeof stored === "number") return stored;
+  await kv.set(OIL_DUE_TACH_KEY, DEFAULT_OIL_DUE_TACH);
+  return DEFAULT_OIL_DUE_TACH;
+}
+
 const PILOT_COLORS = ["#4E5166", "#7C90A0", "#B5AA9D", "#747274", "#B9B7A7"];
 
 // Enable logger
@@ -1168,26 +1195,40 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
 
     const list = flights ?? [];
 
+    const annual = await getAnnualBaseline();
+    const oil_due_tach = await getOilDueTach();
+
     let total_hobbs = 0;
     let total_tach = 0;
-    const byPilotMap = new Map<string, { pilot_id: string; pilot_name: string; hobbs: number; tach: number; count: number }>();
+    let since_annual_hobbs = 0;
+    let since_annual_tach = 0;
+    const byPilotMap = new Map<
+      string,
+      { pilot_id: string; pilot_name: string; hobbs: number; tach: number; count: number }
+    >();
 
     for (const f of list) {
       const hu = Number(f.hobbs_used ?? 0);
       const tu = Number(f.tach_used ?? 0);
       total_hobbs += hu;
       total_tach += tu;
-      const entry = byPilotMap.get(f.pilot_id) ?? {
-        pilot_id: f.pilot_id,
-        pilot_name: f.pilot_name,
-        hobbs: 0,
-        tach: 0,
-        count: 0,
-      };
-      entry.hobbs += hu;
-      entry.tach += tu;
-      entry.count += 1;
-      byPilotMap.set(f.pilot_id, entry);
+
+      const isSinceAnnual = f.date >= annual.date;
+      if (isSinceAnnual) {
+        since_annual_hobbs += hu;
+        since_annual_tach += tu;
+        const entry = byPilotMap.get(f.pilot_id) ?? {
+          pilot_id: f.pilot_id,
+          pilot_name: f.pilot_name,
+          hobbs: 0,
+          tach: 0,
+          count: 0,
+        };
+        entry.hobbs += hu;
+        entry.tach += tu;
+        entry.count += 1;
+        byPilotMap.set(f.pilot_id, entry);
+      }
     }
 
     const by_pilot = Array.from(byPilotMap.values()).map((p) => ({
@@ -1196,14 +1237,18 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
       tach: Math.round(p.tach * 10) / 10,
     }));
 
-    const current_tach = list.length > 0 ? Number(list[0].tach_end) : 0;
-    const oilDueRaw = await kv.get(OIL_DUE_TACH_KEY);
-    const oil_due_tach = typeof oilDueRaw === "number" ? oilDueRaw : DEFAULT_OIL_DUE_TACH;
+    const current_tach =
+      list.length > 0 ? Number(list[0].tach_end) : annual.tach;
     const tach_remaining = Math.round((oil_due_tach - current_tach) * 10) / 10;
 
     return c.json({
       total_hobbs: Math.round(total_hobbs * 10) / 10,
       total_tach: Math.round(total_tach * 10) / 10,
+      since_annual_hobbs: Math.round(since_annual_hobbs * 10) / 10,
+      since_annual_tach: Math.round(since_annual_tach * 10) / 10,
+      annual_date: annual.date,
+      annual_hobbs: annual.hobbs,
+      annual_tach: annual.tach,
       by_pilot,
       oil_due_tach,
       current_tach,
@@ -1306,16 +1351,22 @@ app.post("/make-server-82b8c834/flights", async (c) => {
     const hobbsEndNum = Number(hobbs_end);
     const tachEndNum = Number(tach_end);
 
+    // Chronological predecessor: latest flight whose date <= new flight's date.
+    // For same-date flights, ties broken by created_at desc. Falls back to the
+    // annual baseline if no prior flight exists, so bulk-entered first flights
+    // get a correct delta from the annual instead of a zero.
     const { data: last } = await supabase
       .from("flights")
-      .select("hobbs_end, tach_end")
+      .select("hobbs_end, tach_end, date, created_at")
+      .lte("date", String(date))
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const prevHobbs = last ? Number(last.hobbs_end) : hobbsEndNum;
-    const prevTach = last ? Number(last.tach_end) : tachEndNum;
+    const annual = await getAnnualBaseline();
+    const prevHobbs = last ? Number(last.hobbs_end) : annual.hobbs;
+    const prevTach = last ? Number(last.tach_end) : annual.tach;
     const hobbs_used = Math.round((hobbsEndNum - prevHobbs) * 10) / 10;
     const tach_used = Math.round((tachEndNum - prevTach) * 10) / 10;
 
