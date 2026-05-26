@@ -18,6 +18,9 @@ const DEFAULT_OIL_DUE_TACH = 643;
 const ANNUAL_KEY = "maintenance:annual";
 const DEFAULT_ANNUAL = { date: "2026-02-15", hobbs: 4539.0, tach: 590.4 };
 
+const NEXT_ANNUAL_KEY = "maintenance:next_annual";
+const DEFAULT_NEXT_ANNUAL = "2027-02-28";
+
 type AnnualBaseline = { date: string; hobbs: number; tach: number };
 
 async function getAnnualBaseline(): Promise<AnnualBaseline> {
@@ -40,6 +43,13 @@ async function getOilDueTach(): Promise<number> {
   if (typeof stored === "number") return stored;
   await kv.set(OIL_DUE_TACH_KEY, DEFAULT_OIL_DUE_TACH);
   return DEFAULT_OIL_DUE_TACH;
+}
+
+async function getNextAnnual(): Promise<string> {
+  const stored = await kv.get(NEXT_ANNUAL_KEY);
+  if (typeof stored === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored)) return stored;
+  await kv.set(NEXT_ANNUAL_KEY, DEFAULT_NEXT_ANNUAL);
+  return DEFAULT_NEXT_ANNUAL;
 }
 
 const PILOT_COLORS = ["#4E5166", "#7C90A0", "#B5AA9D", "#747274", "#B9B7A7"];
@@ -1197,6 +1207,7 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
 
     const annual = await getAnnualBaseline();
     const oil_due_tach = await getOilDueTach();
+    const next_annual = await getNextAnnual();
 
     let total_hobbs = 0;
     let total_tach = 0;
@@ -1237,6 +1248,8 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
       tach: Math.round(p.tach * 10) / 10,
     }));
 
+    const current_hobbs =
+      list.length > 0 ? Number(list[0].hobbs_end) : annual.hobbs;
     const current_tach =
       list.length > 0 ? Number(list[0].tach_end) : annual.tach;
     const tach_remaining = Math.round((oil_due_tach - current_tach) * 10) / 10;
@@ -1249,8 +1262,10 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
       annual_date: annual.date,
       annual_hobbs: annual.hobbs,
       annual_tach: annual.tach,
+      next_annual,
       by_pilot,
       oil_due_tach,
+      current_hobbs,
       current_tach,
       tach_remaining,
     });
