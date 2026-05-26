@@ -6,7 +6,11 @@
     "web": "pnpm --filter @av8/web dev",
     "web:build": "pnpm --filter @av8/web build",
     "ios": "pnpm --filter @av8/ios start",
-    "ios:doctor": "pnpm --filter @av8/ios exec expo doctor"
+    "ios:doctor": "pnpm --filter @av8/ios exec expo doctor",
+    "ios:assets": "node scripts/generate-ios-assets.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.0"
   },
   "pnpm": {
     "workspaces": ["apps/*", "packages/*"],

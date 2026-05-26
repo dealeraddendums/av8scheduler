@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "AV8 Scheduler",
+    "slug": "av8-scheduler",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f2744"
+    },
+    "ios": {
+      "bundleIdentifier": "com.dealeraddendums.av8scheduler",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to photograph Hobbs and Tach meters for flight logging",
+        "NSPhotoLibraryUsageDescription": "Used to select gauge photos for flight logging"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f2744"
+      }
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-secure-store"
+    ]
+  }
+}
