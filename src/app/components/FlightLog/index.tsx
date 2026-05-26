@@ -3,7 +3,6 @@ import { Button } from '../ui/button';
 import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
 import { useFlights } from './useFlights';
 import { useDestinations } from './useDestinations';
-import { FlightTotals } from './FlightTotals';
 import { FlightList } from './FlightList';
 import { AddFlightDialog } from './AddFlightDialog';
 import { AdminPanel } from './AdminPanel';
@@ -46,12 +45,6 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
     [users]
   );
 
-  const pilotColors = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const p of pilots) map[p.id] = p.color;
-    return map;
-  }, [pilots]);
-
   const isAdmin = isAdminUser(loggedInUser);
 
   const handleLogClick = () => {
@@ -70,12 +63,6 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
           Track destinations and gauge readings against the 2/15/26 annual.
         </p>
       </div>
-
-      <FlightTotals
-        totals={flightsHook.totals}
-        loading={flightsHook.loading}
-        pilotColors={pilotColors}
-      />
 
       {flightsHook.error && (
         <div

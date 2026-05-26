@@ -616,13 +616,51 @@ export default function Home() {
               <p style={{ fontSize: 12, color: '#6b7280' }}>scheduled</p>
             </div>
 
-            {/* Stat 2 — Hobbs Since Annual */}
+            {/* Stat 2 — Since Annual (Hobbs/Tach, per-pilot breakdown, all-time) */}
             <div style={{ padding: 16 }}>
-              <p style={{ fontSize: 12, color: '#6b7280' }}>Hobbs Since Annual</p>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>Since Annual ({annualShortDate})</p>
               <p style={{ fontSize: 24, fontWeight: 600, color: '#1a1a2e' }} className="tabular-nums">
-                {(flightTotals?.since_annual_hobbs ?? 0).toFixed(1)} hrs
+                {(flightTotals?.since_annual_hobbs ?? 0).toFixed(1)} Hobbs · {(flightTotals?.since_annual_tach ?? 0).toFixed(1)} Tach
               </p>
-              <p style={{ fontSize: 12, color: '#6b7280' }}>since {annualShortDate}</p>
+              {flightTotals && flightTotals.by_pilot.length > 0 && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#6b7280',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 2,
+                  }}
+                  className="tabular-nums"
+                >
+                  {flightTotals.by_pilot.map((p, i) => (
+                    <span
+                      key={p.pilot_id}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      {i > 0 && (
+                        <span style={{ color: 'rgba(78,81,102,0.25)', marginRight: 4 }}>|</span>
+                      )}
+                      <span
+                        className="inline-block rounded-full"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          backgroundColor:
+                            users.find((u) => u.id === p.pilot_id)?.color ?? '#7C90A0',
+                        }}
+                      />
+                      <span style={{ color: '#1a1a2e' }}>{p.pilot_name}</span>
+                      <span>H {p.hobbs.toFixed(1)} · T {p.tach.toFixed(1)}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p style={{ fontSize: 12, color: '#6b7280' }} className="tabular-nums">
+                All time: {(flightTotals?.total_hobbs ?? 0).toFixed(1)} Hobbs · {(flightTotals?.total_tach ?? 0).toFixed(1)} Tach
+              </p>
             </div>
 
             {/* Stat 3 — Aircraft Status (Oil / Annual) */}
