@@ -1,20 +1,52 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { AircraftCalendar } from '../components/AircraftCalendar';
 import { BookingDialog } from '../components/BookingDialog';
 import { EventEditDialog } from '../components/EventEditDialog';
 import { BookingsList } from '../components/BookingsList';
-import { StatsCard } from '../components/StatsCard';
 import { LoginDialog } from '../components/LoginDialog';
-import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Plane, Calendar as CalendarIcon, List, RefreshCw, Settings, LogOut, User as UserIcon, BookOpen } from 'lucide-react';
+import { Calendar as CalendarIcon, List, RefreshCw, BookOpen } from 'lucide-react';
 import { FlightLog } from '../components/FlightLog';
+import type { FlightTotals } from '../components/FlightLog/types';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { SlotInfo } from 'react-big-calendar';
 import { getCookie, setCookie, deleteCookie } from '../utils/cookies';
+
+const DESIGN_BORDER = '1px solid rgba(78,81,102,0.15)';
+
+function statusOilColor(remaining: number | undefined): string {
+  if (remaining === undefined) return '#1a1a2e';
+  if (remaining < 10) return '#EF4444';
+  if (remaining < 25) return '#F59E0B';
+  return '#1a1a2e';
+}
+
+function statusAnnualColor(days: number | undefined): string {
+  if (days === undefined) return '#1a1a2e';
+  if (days < 30) return '#EF4444';
+  if (days < 60) return '#F59E0B';
+  return '#1a1a2e';
+}
+
+function daysUntilLocal(iso: string): number {
+  const parts = iso.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return 0;
+  const [y, m, d] = parts;
+  const target = new Date(y, m - 1, d).getTime();
+  const today = new Date();
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  return Math.round((target - todayMidnight) / 86400000);
+}
+
+function monthYearLocal(iso: string): string {
+  const parts = iso.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
+  const [y, m, d] = parts;
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
 
 interface User {
   id: string;
@@ -68,6 +100,11 @@ export default function Home() {
   const [selectedSlot, setSelectedSlot] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
+  const [flightTotals, setFlightTotals] = useState<FlightTotals | null>(null);
+  // Visual-only pilot filter row (no downstream filter wired yet — keeps the
+  // current behavior of showing everything; toggle state is purely cosmetic
+  // pending a later hookup into calendar/bookings filtering).
+  const [selectedPilots, setSelectedPilots] = useState<Set<string>>(new Set());
 
   // Load logged-in user from cookie on mount
   useEffect(() => {
@@ -88,6 +125,7 @@ export default function Home() {
         fetchUsers();
         fetchBookings();
         fetchDayNotes();
+        fetchFlightTotals();
       }
     };
 
@@ -95,6 +133,7 @@ export default function Home() {
       fetchUsers();
       fetchBookings();
       fetchDayNotes();
+      fetchFlightTotals();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -121,8 +160,8 @@ export default function Home() {
         throw new Error('Failed to initialize users');
       }
 
-      // Fetch users, bookings, and day notes
-      await Promise.all([fetchUsers(), fetchBookings(), fetchDayNotes()]);
+      // Fetch users, bookings, day notes, and flight totals in parallel
+      await Promise.all([fetchUsers(), fetchBookings(), fetchDayNotes(), fetchFlightTotals()]);
       setLoading(false);
     } catch (error) {
       console.error('Error initializing app:', error);
@@ -188,6 +227,19 @@ export default function Home() {
     } catch (error) {
       console.error('Error fetching day notes:', error);
       toast.error('Failed to fetch day notes');
+    }
+  };
+
+  const fetchFlightTotals = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/flights/totals`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && typeof data === 'object') setFlightTotals(data as FlightTotals);
+    } catch (error) {
+      console.error('Error fetching flight totals:', error);
     }
   };
 
@@ -402,6 +454,42 @@ export default function Home() {
 
   const loggedInUser = users.find(u => u.id === loggedInUserId);
 
+  const pilotsForFilter = useMemo(
+    () => users.filter(u => u.userType !== 'spouse'),
+    [users]
+  );
+
+  // Seed the pilot-filter selection once users land. Defaults to all selected;
+  // the row is visual-only for now and does not actually filter calendar or
+  // bookings views.
+  useEffect(() => {
+    if (selectedPilots.size === 0 && pilotsForFilter.length > 0) {
+      setSelectedPilots(new Set(pilotsForFilter.map(p => p.id)));
+    }
+  }, [pilotsForFilter, selectedPilots.size]);
+
+  const now = new Date();
+  const upcomingBookings = bookings.filter(b => new Date(b.startTime) >= now);
+
+  const annualShortDate = flightTotals
+    ? (() => {
+        const p = flightTotals.annual_date.split('-').map(Number);
+        if (p.length !== 3 || p.some(Number.isNaN)) return flightTotals.annual_date;
+        return `${p[1]}/${p[2]}/${String(p[0]).slice(-2)}`;
+      })()
+    : '—';
+
+  const annualDays = flightTotals ? daysUntilLocal(flightTotals.next_annual) : undefined;
+  const oilColor = statusOilColor(flightTotals?.tach_remaining);
+  const annualColor = statusAnnualColor(annualDays);
+  const annualMonthYear = flightTotals ? monthYearLocal(flightTotals.next_annual) : '—';
+
+  const topPilot = useMemo(() => {
+    if (!flightTotals?.by_pilot || flightTotals.by_pilot.length === 0) return undefined;
+    return [...flightTotals.by_pilot].sort((a, b) => b.hobbs - a.hobbs)[0];
+  }, [flightTotals]);
+  const topPilotColor = topPilot ? users.find(u => u.id === topPilot.pilot_id)?.color : undefined;
+
   if (loading) {
     return (
       <div className="size-full flex items-center justify-center">
@@ -414,78 +502,170 @@ export default function Home() {
   }
 
   return (
-    <div className="mottled-blue-background p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white rounded-lg shadow-sm">
-                <span style={{ color: '#4E5166', fontWeight: 500, letterSpacing: '0.1em' }}>N4368V</span>
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">N4368V Scheduler</h1>
-                <p className="text-white">Shared aircraft scheduling for pilots</p>
-              </div>
+    <div className="mottled-blue-background min-h-screen">
+      {/* SECTION 1 — Top nav */}
+      <header
+        className="bg-white"
+        style={{ borderBottom: DESIGN_BORDER, height: 52 }}
+      >
+        <div className="max-w-7xl mx-auto h-full px-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="px-2 py-1 bg-white"
+              style={{ border: DESIGN_BORDER, borderRadius: 6 }}
+            >
+              <span style={{ color: '#4E5166', fontWeight: 700, letterSpacing: '0.1em', fontSize: 14 }}>N4368V</span>
             </div>
-            
-            <div className="flex gap-2 items-center">
-              {loggedInUser && (
-                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border-2 border-blue-200">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: loggedInUser.color }}
-                  />
-                  <UserIcon className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm font-medium">{loggedInUser.name}</span>
-                </div>
-              )}
-              {!loggedInUser && (
-                <Button 
-                  onClick={() => setLoginDialogOpen(true)} 
-                  variant="default" 
-                  className="gap-2"
-                >
-                  <UserIcon className="w-4 h-4" />
-                  Login
-                </Button>
-              )}
-              {loggedInUser && (
-                <>
-                  <Link to="/settings">
-                    <Button variant="outline" className="gap-2 h-10">
-                      <Settings className="w-4 h-4" />
-                      Settings
-                    </Button>
-                  </Link>
-                  <Button 
-                    onClick={handleLogout} 
-                    variant="outline" 
-                    className="gap-2 h-10 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Logout
-                  </Button>
-                </>
-              )}
-            </div>
+            <span style={{ fontSize: 18, fontWeight: 600, color: '#1a1a2e' }}>N4368V</span>
           </div>
 
-          <div className="flex gap-4 mt-4">
-            {users.filter(user => user.userType !== 'spouse').map(user => (
-              <div key={user.id} className="flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm">
-                <div 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: user.color }}
+          <div className="flex items-center gap-3" style={{ fontSize: 14 }}>
+            {loggedInUser ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block rounded-full"
+                    style={{ width: 8, height: 8, backgroundColor: loggedInUser.color }}
+                  />
+                  <span style={{ color: '#1a1a2e' }}>{loggedInUser.name}</span>
+                </div>
+                <span style={{ color: 'rgba(78,81,102,0.25)' }}>|</span>
+                <Link
+                  to="/settings"
+                  className="hover:text-[#4E5166]"
+                  style={{ color: '#1a1a2e' }}
+                >
+                  Settings
+                </Link>
+                <span style={{ color: 'rgba(78,81,102,0.25)' }}>|</span>
+                <button
+                  onClick={handleLogout}
+                  className="hover:underline"
+                  style={{ color: '#b91c1c', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14 }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setLoginDialogOpen(true)}
+                className="hover:text-[#4E5166]"
+                style={{ color: '#1a1a2e', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14 }}
+              >
+                Login
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* SECTION 2 — Pilot filter row */}
+      <div className="bg-white" style={{ borderBottom: DESIGN_BORDER }}>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+          <span style={{ fontSize: 12, color: '#6b7280' }}>Pilot</span>
+          {pilotsForFilter.map(u => {
+            const selected = selectedPilots.has(u.id);
+            return (
+              <button
+                key={u.id}
+                onClick={() => {
+                  setSelectedPilots(prev => {
+                    const next = new Set(prev);
+                    if (next.has(u.id)) next.delete(u.id);
+                    else next.add(u.id);
+                    return next;
+                  });
+                }}
+                style={{
+                  fontSize: 13,
+                  padding: '6px 12px',
+                  borderRadius: 6,
+                  border: `1px solid ${selected ? '#4E5166' : 'rgba(78,81,102,0.15)'}`,
+                  background: selected ? 'rgba(78,81,102,0.08)' : 'white',
+                  color: '#1a1a2e',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                <span
+                  className="inline-block rounded-full"
+                  style={{ width: 8, height: 8, backgroundColor: u.color }}
                 />
-                <span className="text-sm font-medium">{user.name}</span>
-              </div>
-            ))}
+                {u.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-4">
+        {/* SECTION 3 — Stats bar */}
+        <div
+          className="bg-white"
+          style={{ border: DESIGN_BORDER, borderRadius: 10 }}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-[rgba(78,81,102,0.15)]">
+            {/* Stat 1 — Upcoming Flights */}
+            <div style={{ padding: 16 }}>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>Upcoming Flights</p>
+              <p style={{ fontSize: 24, fontWeight: 600, color: '#1a1a2e' }} className="tabular-nums">
+                {upcomingBookings.length}
+              </p>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>scheduled</p>
+            </div>
+
+            {/* Stat 2 — Hobbs Since Annual */}
+            <div style={{ padding: 16 }}>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>Hobbs Since Annual</p>
+              <p style={{ fontSize: 24, fontWeight: 600, color: '#1a1a2e' }} className="tabular-nums">
+                {(flightTotals?.since_annual_hobbs ?? 0).toFixed(1)} hrs
+              </p>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>since {annualShortDate}</p>
+            </div>
+
+            {/* Stat 3 — Aircraft Status (Oil / Annual) */}
+            <div style={{ padding: 16 }}>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>Oil / Annual</p>
+              <p style={{ fontSize: 24, fontWeight: 600 }} className="tabular-nums">
+                <span style={{ color: oilColor }}>
+                  {flightTotals ? `${flightTotals.tach_remaining.toFixed(1)} hrs` : '—'}
+                </span>
+                <span style={{ color: '#6b7280' }}> · </span>
+                <span style={{ color: annualColor }}>
+                  {annualDays !== undefined ? `${annualDays} days` : '—'}
+                </span>
+              </p>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>
+                {flightTotals
+                  ? `Tach ${flightTotals.current_tach.toFixed(1)} · Next annual ${annualMonthYear}`
+                  : 'Tach — · Next annual —'}
+              </p>
+            </div>
+
+            {/* Stat 4 — Top Pilot */}
+            <div style={{ padding: 16 }}>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>Top Pilot</p>
+              <p
+                style={{ fontSize: 24, fontWeight: 600, color: '#1a1a2e', display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                {topPilot && (
+                  <span
+                    className="inline-block rounded-full"
+                    style={{ width: 8, height: 8, backgroundColor: topPilotColor ?? '#7C90A0' }}
+                  />
+                )}
+                {topPilot?.pilot_name ?? '—'}
+              </p>
+              <p style={{ fontSize: 12, color: '#6b7280' }} className="tabular-nums">
+                {(topPilot?.hobbs ?? 0).toFixed(1)} hrs · {topPilot?.count ?? 0} flights
+              </p>
+            </div>
           </div>
         </div>
 
-        {loggedInUser && <StatsCard bookings={bookings} users={users} />}
-
-        <Tabs defaultValue="calendar" className="space-y-4 mt-6">
+        <Tabs defaultValue="calendar" className="space-y-4">
           <TabsList className="grid w-full max-w-md grid-cols-3">
             <TabsTrigger value="calendar" className="gap-2">
               <CalendarIcon className="w-4 h-4" />
@@ -542,7 +722,7 @@ export default function Home() {
             />
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
 
       <BookingDialog
         open={dialogOpen}
