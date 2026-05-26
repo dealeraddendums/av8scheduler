@@ -1432,9 +1432,11 @@ app.get("/make-server-82b8c834/flights/export", async (c) => {
 app.post("/make-server-82b8c834/flights", async (c) => {
   try {
     const body = await c.req.json();
+    console.log("POST /flights payload:", JSON.stringify(body));
     const { pilot_id, pilot_name, date, destination, hobbs_end, tach_end, notes, photo_url } = body ?? {};
 
     if (!pilot_id || !pilot_name || !date || !destination || hobbs_end === undefined || tach_end === undefined) {
+      console.error("POST /flights validation failed:", { pilot_id, pilot_name, date, destination, hobbs_end, tach_end });
       return c.json({ error: "Missing required fields" }, 400);
     }
 
@@ -1460,28 +1462,34 @@ app.post("/make-server-82b8c834/flights", async (c) => {
     const hobbs_used = Math.round((hobbsEndNum - prevHobbs) * 10) / 10;
     const tach_used = Math.round((tachEndNum - prevTach) * 10) / 10;
 
+    const insertRow = {
+      pilot_id,
+      pilot_name,
+      date,
+      destination: String(destination).toUpperCase(),
+      hobbs_end: hobbsEndNum,
+      tach_end: tachEndNum,
+      hobbs_used,
+      tach_used,
+      notes: notes ?? null,
+      photo_url: photo_url ?? null,
+    };
+
     const { data, error } = await supabase
       .from("flights")
-      .insert({
-        pilot_id,
-        pilot_name,
-        date,
-        destination: String(destination).toUpperCase(),
-        hobbs_end: hobbsEndNum,
-        tach_end: tachEndNum,
-        hobbs_used,
-        tach_used,
-        notes: notes ?? null,
-        photo_url: photo_url ?? null,
-      })
+      .insert(insertRow)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error("POST /flights supabase insert error:", error, "row:", insertRow);
+      return c.json({ error: error.message ?? String(error) }, 400);
+    }
 
     return c.json(data);
-  } catch (error) {
-    console.log("Error creating flight:", error);
-    return c.json({ error: `Failed to create flight: ${error}` }, 500);
+  } catch (err) {
+    console.error("POST /flights error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to create flight: ${msg}` }, 500);
   }
 });
 

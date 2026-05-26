@@ -60,8 +60,20 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
       await refresh();
       return created;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create flight';
-      toast.error(msg);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : (() => {
+              try {
+                return JSON.stringify(err);
+              } catch {
+                return 'Failed to create flight';
+              }
+            })();
+      console.error('createFlight error:', err, 'payload:', input);
+      toast.error(`Failed to create flight: ${msg}`);
       return null;
     }
   }, [refresh]);

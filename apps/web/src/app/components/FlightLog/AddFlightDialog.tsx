@@ -153,7 +153,7 @@ export function AddFlightDialog({
     if (!pilot || !validDestination || hobbsEnd === null || tachEnd === null) return;
     setSubmitting(true);
     setSubmitError(null);
-    const result = await createFlight({
+    const payload = {
       pilot_id: pilot.id,
       pilot_name: pilot.name,
       date: toIsoDate(date),
@@ -162,13 +162,33 @@ export function AddFlightDialog({
       tach_end: tachEnd,
       notes: notes.trim() || null,
       oil_added_qts: oilAdded ? 1 : 0,
-    });
-    setSubmitting(false);
-    if (result) {
-      onOpenChange(false);
-      onSaved?.();
-    } else {
-      setSubmitError('Save failed. Check your connection and try again.');
+    };
+    console.log('AddFlightDialog payload:', payload);
+    try {
+      const result = await createFlight(payload);
+      setSubmitting(false);
+      if (result) {
+        onOpenChange(false);
+        onSaved?.();
+      } else {
+        setSubmitError('Save failed — check the browser console for details.');
+      }
+    } catch (err) {
+      setSubmitting(false);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : (() => {
+              try {
+                return JSON.stringify(err);
+              } catch {
+                return 'Unknown error';
+              }
+            })();
+      console.error('AddFlightDialog handleSave error:', err);
+      setSubmitError(`Failed to create flight: ${msg}`);
     }
   };
 
