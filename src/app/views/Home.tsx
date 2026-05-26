@@ -480,7 +480,8 @@ export default function Home() {
     : '—';
 
   const annualDays = flightTotals ? daysUntilLocal(flightTotals.next_annual) : undefined;
-  const oilColor = statusOilColor(flightTotals?.tach_remaining);
+  const oilTachRemaining = flightTotals?.oil_summary?.tach_remaining ?? flightTotals?.tach_remaining;
+  const oilColor = statusOilColor(oilTachRemaining);
   const annualColor = statusAnnualColor(annualDays);
   const annualMonthYear = flightTotals ? monthYearLocal(flightTotals.next_annual) : '—';
 
@@ -668,13 +669,20 @@ export default function Home() {
               <p style={{ fontSize: 12, color: '#6b7280' }}>Oil / Annual</p>
               <p style={{ fontSize: 24, fontWeight: 600 }} className="tabular-nums">
                 <span style={{ color: oilColor }}>
-                  {flightTotals ? `${flightTotals.tach_remaining.toFixed(1)} hrs` : '—'}
+                  {oilTachRemaining !== undefined ? `${oilTachRemaining.toFixed(1)} hrs` : '—'}
                 </span>
                 <span style={{ color: '#6b7280' }}> · </span>
                 <span style={{ color: annualColor }}>
                   {annualDays !== undefined ? `${annualDays} days` : '—'}
                 </span>
               </p>
+              {flightTotals?.oil_summary && (
+                <p style={{ fontSize: 12, color: '#6b7280' }} className="tabular-nums">
+                  {flightTotals.oil_summary.quarts_added_since_change.toFixed(1)} qt added ·{' '}
+                  {flightTotals.oil_summary.flights_since_change}{' '}
+                  {flightTotals.oil_summary.flights_since_change === 1 ? 'flight' : 'flights'} since change
+                </p>
+              )}
               <p style={{ fontSize: 12, color: '#6b7280' }}>
                 {flightTotals
                   ? `Tach ${flightTotals.current_tach.toFixed(1)} · Next annual ${annualMonthYear}`

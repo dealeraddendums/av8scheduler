@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
 import { Calendar as CalendarIcon, AlertTriangle, Check } from 'lucide-react';
 import { GaugeCapture } from './GaugeCapture';
 import type { Destination, Flight, LastReading, NewFlightInput } from './types';
@@ -97,6 +98,7 @@ export function AddFlightDialog({
   const [hobbsEnd, setHobbsEnd] = useState<number | null>(null);
   const [tachEnd, setTachEnd] = useState<number | null>(null);
   const [notes, setNotes] = useState<string>('');
+  const [oilAdded, setOilAdded] = useState<boolean>(false);
   const [lastReading, setLastReading] = useState<LastReading | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export function AddFlightDialog({
       setHobbsEnd(null);
       setTachEnd(null);
       setNotes('');
+      setOilAdded(false);
       setLastReading(null);
       setSubmitError(null);
       // pre-fetch last reading in the background
@@ -158,6 +161,7 @@ export function AddFlightDialog({
       hobbs_end: hobbsEnd,
       tach_end: tachEnd,
       notes: notes.trim() || null,
+      oil_added_qts: oilAdded ? 1 : 0,
     });
     setSubmitting(false);
     if (result) {
@@ -400,6 +404,26 @@ export function AddFlightDialog({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Anything worth remembering about this flight…"
               />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="oil-added"
+                checked={oilAdded}
+                onCheckedChange={(v) => setOilAdded(v === true)}
+              />
+              <Label
+                htmlFor="oil-added"
+                className="font-normal cursor-pointer flex items-center gap-2"
+                style={{ fontSize: 13, color: '#6b7280' }}
+              >
+                Added oil before this flight
+                {oilAdded && (
+                  <span className="text-[#4E5166]" style={{ fontSize: 13 }}>
+                    Quarts added: 1
+                  </span>
+                )}
+              </Label>
             </div>
           </div>
         )}

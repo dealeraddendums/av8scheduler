@@ -10,7 +10,29 @@ export interface Flight {
   tach_used: number | null;
   notes: string | null;
   photo_url: string | null;
+  oil_added_qts: number | null;
   created_at: string;
+}
+
+export interface MaintenanceEvent {
+  id: string;
+  type: 'oil_change' | 'annual';
+  pilot_id: string;
+  pilot_name: string;
+  date: string;
+  tach_reading: number;
+  hobbs_reading: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface OilSummary {
+  last_oil_change: { date: string; tach: number } | null;
+  oil_due_tach: number;
+  tach_remaining: number;
+  quarts_added_since_change: number;
+  flights_since_change: number;
+  hobbs_since_change: number;
 }
 
 export interface PilotTotals {
@@ -35,6 +57,7 @@ export interface FlightTotals {
   current_hobbs: number;
   current_tach: number;
   tach_remaining: number;
+  oil_summary: OilSummary;
 }
 
 export interface Destination {
@@ -64,5 +87,16 @@ export interface NewFlightInput {
   destination: string;
   hobbs_end: number;
   tach_end: number;
+  notes?: string | null;
+  oil_added_qts?: number;
+}
+
+export interface NewMaintenanceInput {
+  type: 'oil_change' | 'annual';
+  pilot_id: string;
+  pilot_name: string;
+  date: string;
+  tach_reading: number;
+  hobbs_reading?: number | null;
   notes?: string | null;
 }

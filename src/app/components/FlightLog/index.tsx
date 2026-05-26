@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Button } from '../ui/button';
-import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle, Wrench } from 'lucide-react';
 import { useFlights } from './useFlights';
 import { useDestinations } from './useDestinations';
+import { useMaintenanceEvents } from './useMaintenanceEvents';
 import { FlightList } from './FlightList';
 import { AddFlightDialog } from './AddFlightDialog';
+import { LogMaintenanceDialog } from './LogMaintenanceDialog';
 import { AdminPanel } from './AdminPanel';
 
 interface FlightLogUser {
@@ -35,7 +37,9 @@ function isAdminUser(user: FlightLogUser | undefined): boolean {
 export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProps) {
   const flightsHook = useFlights();
   const destinationsHook = useDestinations();
+  const maintenanceHook = useMaintenanceEvents();
   const [addOpen, setAddOpen] = useState(false);
+  const [maintOpen, setMaintOpen] = useState(false);
 
   const pilots = useMemo(
     () =>
@@ -53,6 +57,21 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
       return;
     }
     setAddOpen(true);
+  };
+
+  const handleMaintClick = () => {
+    if (!loggedInUser) {
+      onRequestLogin();
+      return;
+    }
+    setMaintOpen(true);
+  };
+
+  const handleMaintenanceSaved = () => {
+    // After a maintenance event lands, refresh both flights (totals + delta
+    // chain may shift) and maintenance events.
+    flightsHook.refresh();
+    maintenanceHook.refresh();
   };
 
   return (
@@ -85,12 +104,21 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
           onClick={() => {
             flightsHook.refresh();
             destinationsHook.refresh();
+            maintenanceHook.refresh();
           }}
           disabled={flightsHook.loading}
           className="gap-2 h-10 border-[rgba(78,81,102,0.2)] text-[#4E5166] hover:bg-[#f8f8f8]"
         >
           <RefreshCw className={`w-4 h-4 ${flightsHook.loading ? 'animate-spin' : ''}`} />
           Refresh
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleMaintClick}
+          className="gap-2 h-10 border-[rgba(78,81,102,0.2)] text-[#4E5166] hover:bg-[#f8f8f8]"
+        >
+          <Wrench className="w-4 h-4" />
+          Log Maintenance
         </Button>
         <Button
           onClick={handleLogClick}
@@ -103,9 +131,10 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
 
       <FlightList
         flights={flightsHook.flights}
+        maintenanceEvents={maintenanceHook.events}
         destinations={destinationsHook.destinations}
         pilots={pilots}
-        loading={flightsHook.loading}
+        loading={flightsHook.loading || maintenanceHook.loading}
         isAdmin={isAdmin}
         onDelete={flightsHook.deleteFlight}
       />
@@ -124,16 +153,26 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
       />
 
       {loggedInUser && (
-        <AddFlightDialog
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          currentUser={{ id: loggedInUser.id, name: loggedInUser.name }}
-          pilots={pilots.map((p) => ({ id: p.id, name: p.name }))}
-          isAdmin={isAdmin}
-          destinations={destinationsHook.destinations}
-          fetchLastReading={flightsHook.fetchLastReading}
-          createFlight={flightsHook.createFlight}
-        />
+        <>
+          <AddFlightDialog
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            currentUser={{ id: loggedInUser.id, name: loggedInUser.name }}
+            pilots={pilots.map((p) => ({ id: p.id, name: p.name }))}
+            isAdmin={isAdmin}
+            destinations={destinationsHook.destinations}
+            fetchLastReading={flightsHook.fetchLastReading}
+            createFlight={flightsHook.createFlight}
+          />
+          <LogMaintenanceDialog
+            open={maintOpen}
+            onOpenChange={setMaintOpen}
+            currentUser={{ id: loggedInUser.id, name: loggedInUser.name }}
+            oilSummary={flightsHook.totals?.oil_summary ?? null}
+            onCreate={maintenanceHook.createEvent}
+            onSaved={handleMaintenanceSaved}
+          />
+        </>
       )}
     </div>
   );

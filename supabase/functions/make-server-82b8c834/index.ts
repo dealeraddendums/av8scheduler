@@ -21,7 +21,22 @@ const DEFAULT_ANNUAL = { date: "2026-02-15", hobbs: 4539.0, tach: 590.4 };
 const NEXT_ANNUAL_KEY = "maintenance:next_annual";
 const DEFAULT_NEXT_ANNUAL = "2027-02-28";
 
+const LAST_OIL_CHANGE_KEY = "maintenance:last_oil_change";
+const OIL_INTERVAL_TACH = 50;
+
 type AnnualBaseline = { date: string; hobbs: number; tach: number };
+type LastOilChange = { date: string; tach: number };
+
+function lastDayOfMonth(year: number, month1Based: number): string {
+  const d = new Date(year, month1Based, 0); // day 0 of next month = last day of this
+  return `${year}-${String(month1Based).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function nextAnnualFromDate(iso: string): string {
+  const [y, m] = iso.split("-").map(Number);
+  if (!y || !m) return iso;
+  return lastDayOfMonth(y + 1, m);
+}
 
 async function getAnnualBaseline(): Promise<AnnualBaseline> {
   const stored = await kv.get(ANNUAL_KEY);
@@ -50,6 +65,63 @@ async function getNextAnnual(): Promise<string> {
   if (typeof stored === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored)) return stored;
   await kv.set(NEXT_ANNUAL_KEY, DEFAULT_NEXT_ANNUAL);
   return DEFAULT_NEXT_ANNUAL;
+}
+
+async function getLastOilChange(): Promise<LastOilChange | null> {
+  const stored = await kv.get(LAST_OIL_CHANGE_KEY);
+  if (
+    stored &&
+    typeof stored === "object" &&
+    typeof (stored as { date?: unknown }).date === "string" &&
+    typeof (stored as { tach?: unknown }).tach === "number"
+  ) {
+    return stored as LastOilChange;
+  }
+  return null;
+}
+
+async function getOilSummary() {
+  const annual = await getAnnualBaseline();
+  const oil_due_tach = await getOilDueTach();
+  const lastOilChange = await getLastOilChange();
+  const sinceDate = lastOilChange?.date ?? annual.date;
+
+  const { data: flightsSince } = await supabase
+    .from("flights")
+    .select("hobbs_used, oil_added_qts")
+    .gte("date", sinceDate);
+  const since = flightsSince ?? [];
+
+  const quarts_added_since_change = since.reduce(
+    (sum, f) => sum + Number(f.oil_added_qts ?? 0),
+    0
+  );
+  const hobbs_since_change = since.reduce(
+    (sum, f) => sum + Number(f.hobbs_used ?? 0),
+    0
+  );
+  const flights_since_change = since.length;
+
+  const { data: latest } = await supabase
+    .from("flights")
+    .select("tach_end")
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const current_tach = latest
+    ? Number(latest.tach_end)
+    : lastOilChange?.tach ?? annual.tach;
+  const tach_remaining = Math.round((oil_due_tach - current_tach) * 10) / 10;
+
+  return {
+    last_oil_change: lastOilChange,
+    oil_due_tach,
+    tach_remaining,
+    quarts_added_since_change: Math.round(quarts_added_since_change * 10) / 10,
+    flights_since_change,
+    hobbs_since_change: Math.round(hobbs_since_change * 10) / 10,
+  };
 }
 
 const PILOT_COLORS = ["#4E5166", "#7C90A0", "#B5AA9D", "#747274", "#B9B7A7"];
@@ -1254,6 +1326,8 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
       list.length > 0 ? Number(list[0].tach_end) : annual.tach;
     const tach_remaining = Math.round((oil_due_tach - current_tach) * 10) / 10;
 
+    const oil_summary = await getOilSummary();
+
     return c.json({
       total_hobbs: Math.round(total_hobbs * 10) / 10,
       total_tach: Math.round(total_tach * 10) / 10,
@@ -1268,6 +1342,7 @@ app.get("/make-server-82b8c834/flights/totals", async (c) => {
       current_hobbs,
       current_tach,
       tach_remaining,
+      oil_summary,
     });
   } catch (error) {
     console.log("Error computing totals:", error);
@@ -1490,6 +1565,85 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
   } catch (error) {
     console.log("Error reading gauges:", error);
     return c.json({ error: `Failed to read gauges: ${error}` }, 500);
+  }
+});
+
+// ── Maintenance Events ────────────────────────────────────────
+
+app.get("/make-server-82b8c834/maintenance-events", async (c) => {
+  try {
+    const { data, error } = await supabase
+      .from("maintenance_events")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return c.json(data ?? []);
+  } catch (error) {
+    console.log("Error fetching maintenance events:", error);
+    return c.json({ error: `Failed to fetch maintenance events: ${error}` }, 500);
+  }
+});
+
+app.post("/make-server-82b8c834/maintenance-events", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { type, pilot_id, pilot_name, date, tach_reading, hobbs_reading, notes } = body ?? {};
+    if (!type || !pilot_id || !pilot_name || !date || tach_reading === undefined) {
+      return c.json({ error: "Missing required fields" }, 400);
+    }
+    if (type !== "oil_change" && type !== "annual") {
+      return c.json({ error: "type must be oil_change or annual" }, 400);
+    }
+    if (type === "annual" && hobbs_reading === undefined) {
+      return c.json({ error: "hobbs_reading is required for annual events" }, 400);
+    }
+
+    const tachNum = Number(tach_reading);
+    const hobbsNum = hobbs_reading === undefined || hobbs_reading === null ? null : Number(hobbs_reading);
+
+    const { data, error } = await supabase
+      .from("maintenance_events")
+      .insert({
+        type,
+        pilot_id,
+        pilot_name,
+        date,
+        tach_reading: tachNum,
+        hobbs_reading: hobbsNum,
+        notes: notes ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    // KV side effects
+    if (type === "oil_change") {
+      await kv.set(OIL_DUE_TACH_KEY, Math.round((tachNum + OIL_INTERVAL_TACH) * 10) / 10);
+      await kv.set(LAST_OIL_CHANGE_KEY, { date, tach: tachNum });
+    } else if (type === "annual" && hobbsNum !== null) {
+      await kv.set(ANNUAL_KEY, { date, hobbs: hobbsNum, tach: tachNum });
+      await kv.set(NEXT_ANNUAL_KEY, nextAnnualFromDate(date));
+      await kv.set(OIL_DUE_TACH_KEY, Math.round((tachNum + OIL_INTERVAL_TACH) * 10) / 10);
+      // Annual implicitly resets oil tracking, since after a fresh annual the
+      // oil change clock starts there.
+      await kv.set(LAST_OIL_CHANGE_KEY, { date, tach: tachNum });
+    }
+
+    return c.json(data);
+  } catch (error) {
+    console.log("Error creating maintenance event:", error);
+    return c.json({ error: `Failed to create maintenance event: ${error}` }, 500);
+  }
+});
+
+app.get("/make-server-82b8c834/oil-summary", async (c) => {
+  try {
+    const summary = await getOilSummary();
+    return c.json(summary);
+  } catch (error) {
+    console.log("Error computing oil summary:", error);
+    return c.json({ error: `Failed to compute oil summary: ${error}` }, 500);
   }
 });
 
