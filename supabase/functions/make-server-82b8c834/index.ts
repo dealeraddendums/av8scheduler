@@ -1541,7 +1541,7 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-5",
         max_tokens: 256,
         messages: [
           {
@@ -1577,8 +1577,9 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
 
     return c.json(parsed);
   } catch (error) {
-    console.log("Error reading gauges:", error);
-    return c.json({ error: `Failed to read gauges: ${error}` }, 500);
+    console.error("Error reading gauges:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    return c.json({ error: `Failed to read gauges: ${msg}` }, 500);
   }
 });
 
