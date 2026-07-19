@@ -24,6 +24,8 @@ import {
   Save,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { toast } from 'sonner';
+import { downloadForeFlightCsv } from './foreflightExport';
 import type { Destination, Flight, FlightTotals, NewFlightInput } from '@av8/api';
 
 interface AdminPanelProps {
@@ -216,6 +218,11 @@ export function AdminPanel({
   const [openB, setOpenB] = useState(false);
   const [openC, setOpenC] = useState(false);
 
+  // Section B — ForeFlight export
+  const [ffPilotId, setFfPilotId] = useState<string>('');
+  const [ffStart, setFfStart] = useState<string>('');
+  const [ffEnd, setFfEnd] = useState<string>('');
+
   // Section A
   const [newIcao, setNewIcao] = useState('');
   const [newName, setNewName] = useState('');
@@ -246,6 +253,32 @@ export function AdminPanel({
       setBulkPilotId(bulkPilots[0]?.id ?? '');
     }
   }, [bulkPilots, bulkPilotId]);
+
+  // ForeFlight export: default to Allan (user1), else first pilot
+  useEffect(() => {
+    if (!pilots.some((p) => p.id === ffPilotId)) {
+      setFfPilotId(pilots.find((p) => p.id === 'user1')?.id ?? pilots[0]?.id ?? '');
+    }
+  }, [pilots, ffPilotId]);
+
+  const handleForeFlightExport = () => {
+    const pilot = pilots.find((p) => p.id === ffPilotId);
+    if (!pilot) {
+      toast.error('Select a pilot first');
+      return;
+    }
+    const count = downloadForeFlightCsv(flights, {
+      pilotId: pilot.id,
+      pilotName: pilot.name,
+      startDate: ffStart || undefined,
+      endDate: ffEnd || undefined,
+    });
+    if (count === 0) {
+      toast.error('No flights match that pilot and date range');
+    } else {
+      toast.success(`Exported ${count} flight${count === 1 ? '' : 's'} for ${pilot.name}`);
+    }
+  };
 
   const filteredDests = useMemo(() => {
     const q = bulkDestQuery.trim().toLowerCase();
@@ -475,6 +508,62 @@ export function AdminPanel({
             <FileText className="w-4 h-4" />
             Download PDF summary
           </Button>
+
+          {/* ForeFlight logbook export */}
+          <div className="pt-3 mt-3 space-y-2" style={{ borderTop: BORDER }}>
+            <p className="text-sm text-[#4E5166]">ForeFlight logbook</p>
+            <p className="text-xs text-[#747274] leading-snug">
+              One pilot per file — import at plan.foreflight.com. Use the date
+              range to export only flights since your last import (re-importing
+              the same rows creates duplicates in ForeFlight).
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {pilots.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setFfPilotId(p.id)}
+                  className={`px-3 h-9 text-sm rounded-md border transition-colors ${
+                    ffPilotId === p.id
+                      ? 'bg-[#4E5166] text-white border-[#4E5166]'
+                      : 'bg-white text-[#4E5166] border-[rgba(78,81,102,0.2)] hover:bg-[#f8f8f8]'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="ff-start" className="text-xs">From date (optional)</Label>
+                <Input
+                  id="ff-start"
+                  type="date"
+                  value={ffStart}
+                  onChange={(e) => setFfStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="ff-end" className="text-xs">To date (optional)</Label>
+                <Input
+                  id="ff-end"
+                  type="date"
+                  value={ffEnd}
+                  onChange={(e) => setFfEnd(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-start gap-2 h-11 border-[rgba(78,81,102,0.2)] text-[#4E5166] hover:bg-[#f8f8f8]"
+              onClick={handleForeFlightExport}
+              disabled={flights.length === 0 || !ffPilotId}
+            >
+              <FileDown className="w-4 h-4" />
+              Download ForeFlight CSV
+            </Button>
+          </div>
         </div>
       </SectionShell>
 

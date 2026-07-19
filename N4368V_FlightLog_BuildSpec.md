@@ -250,7 +250,8 @@ Key native patterns:
 
 app.json bundle ID: `com.dealeraddendums.av8scheduler` (under Apple Developer account dealeraddendums@icloud.com)
 
-TestFlight: `eas build --platform ios --profile preview` → `eas submit`
+TestFlight: `eas build --platform ios --profile production` → `eas submit --platform ios --latest`
+(Note: the `preview` profile in `eas.json` is `distribution: internal` (ad-hoc) and cannot be submitted to TestFlight — always build with `production`.)
 
 ---
 
@@ -302,7 +303,7 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26) |
 | 2 | Web: FlightLog tab + all components | ✅ Done (2026-05-26) |
 | 3 | iOS: Expo monorepo + all screens | ✅ Scaffolded (2026-05-26) — auth, navigation, FlightLog/AddFlight/LogMaintenance/Admin screens, offline queue. expo-doctor: 21/21 checks pass. |
-| 4 | TestFlight build + distribution | ⏳ Pending manual steps: `eas login`, `eas build --platform ios --profile preview`, App Store Connect app creation, `eas submit` |
+| 4 | TestFlight build + distribution | ⏳ Pending manual steps (Allan): `eas login`, `eas build --platform ios --profile production` (NOT `preview` — internal dist can't submit to TestFlight), App Store Connect app creation (bundle ID `com.dealeraddendums.av8scheduler`), `eas submit --platform ios --latest`, add pilots as internal testers |
 
 ---
 

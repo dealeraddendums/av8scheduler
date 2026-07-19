@@ -143,6 +143,8 @@ export function EventEditDialog({
   
   // Determine permissions
   const isOwnBooking = loggedInUserId === booking.userId;
+  // Maintenance and Note blocks have no real owner ('maintenance'/'note') — any logged-in user can manage them
+  const isSharedBlock = (booking.userId === 'maintenance' || booking.userId === 'note') && !!loggedInUserId;
   const isSpouseOfPilot = loggedInUser?.userType === 'spouse' && loggedInUser.linkedPilotId === booking.userId;
   const isRequester = loggedInUserId === booking.requestedBy || 
                        (loggedInUser?.userType === 'spouse' && loggedInUser.linkedPilotId === booking.requestedBy);
@@ -152,13 +154,13 @@ export function EventEditDialog({
   const isUnacceptedRequest = booking.isRequest && !booking.acceptedBy;
   const isAcceptedRequest = booking.isRequest && booking.acceptedBy;
   
-  const canEdit = isUnacceptedRequest 
+  const canEdit = isUnacceptedRequest
     ? isRequester // Only requester can edit an unaccepted request
-    : (isOwnBooking || isSpouseOfPilot); // After acceptance, owner can edit
-  
+    : (isOwnBooking || isSpouseOfPilot || isSharedBlock); // After acceptance, owner can edit
+
   const canDelete = isUnacceptedRequest
     ? isRequester // Only requester can cancel an unaccepted request
-    : (isOwnBooking || isSpouseOfPilot || isRequester); // After acceptance, both owner and requester can delete
+    : (isOwnBooking || isSpouseOfPilot || isRequester || isSharedBlock); // After acceptance, both owner and requester can delete
   
   const canAccept = isUnacceptedRequest && !isRequester && loggedInUserId; // Anyone except requester can accept
 

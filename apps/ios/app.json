@@ -11,14 +11,19 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to photograph Hobbs and Tach meters for flight logging",
-        "NSPhotoLibraryUsageDescription": "Used to select gauge photos for flight logging"
+        "NSPhotoLibraryUsageDescription": "Used to select gauge photos for flight logging",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f2744"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-camera",
@@ -31,6 +36,12 @@
           "backgroundColor": "#0f2744"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "46784670-027f-4fb1-81fb-4d547d722933"
+      }
+    },
+    "owner": "allantone"
   }
 }
