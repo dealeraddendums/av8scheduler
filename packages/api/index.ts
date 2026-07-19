@@ -221,8 +221,18 @@ export async function fetchOilSummary(): Promise<OilSummary> {
 
 // ── AI gauge reading ─────────────────────────────────────────────────────
 
-export async function readGauges(base64: string, mediaType: string): Promise<GaugeReading> {
-  return apiPost<GaugeReading>('/read-gauges', { image_base64: base64, media_type: mediaType });
+export type GaugeTarget = 'hobbs' | 'tach' | 'both';
+
+export async function readGauges(
+  base64: string,
+  mediaType: string,
+  gauge: GaugeTarget = 'both'
+): Promise<GaugeReading> {
+  return apiPost<GaugeReading>('/read-gauges', {
+    image_base64: base64,
+    media_type: mediaType,
+    gauge,
+  });
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────

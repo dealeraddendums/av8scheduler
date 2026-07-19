@@ -1516,22 +1516,49 @@ app.delete("/make-server-82b8c834/flights/:id", async (c) => {
 app.post("/make-server-82b8c834/read-gauges", async (c) => {
   try {
     const body = await c.req.json();
-    const { image_base64, media_type } = body ?? {};
+    const { image_base64, media_type, gauge } = body ?? {};
     if (!image_base64 || !media_type) {
       return c.json({ error: "image_base64 and media_type are required" }, 400);
     }
+    const target: "hobbs" | "tach" | "both" =
+      gauge === "hobbs" || gauge === "tach" ? gauge : "both";
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) {
       return c.json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
     }
 
-    const prompt =
-      `You are reading aircraft instrument gauges from a cockpit photo.\n` +
-      `Find the Hobbs meter (elapsed time, shows decimal hours like 456.3) \n` +
-      `and the Tach meter (RPM/hours display showing engine time like 61.0).\n` +
-      `Return ONLY valid JSON: {"hobbs": 96.8, "tach": 63.1, "confidence": "high"}\n` +
-      `If you cannot read a value clearly, use null and set confidence to "low".`;
+    // N4368V panel specifics: Datcon "ELAPSED TIME" Hobbs meter (digit
+    // wheels, rightmost digit is tenths, marked 1/10) and a tachometer with
+    // a small hour-meter digit window (rightmost digit is tenths). An "OIL
+    // DUE ###" sticker sits between them and must be ignored.
+    const prompts: Record<"hobbs" | "tach" | "both", string> = {
+      hobbs:
+        `You are reading a close-up photo of an aircraft Hobbs meter ` +
+        `(Datcon "ELAPSED TIME" style): a row of digit wheels where the ` +
+        `rightmost digit is tenths of an hour (marked 1/10). Read the full ` +
+        `value including the tenths digit (e.g. 4615.8). Ignore glare, ` +
+        `reflections, and any stickers or labels.\n` +
+        `Return ONLY valid JSON: {"hobbs": 4615.8, "tach": null, "confidence": "high"}\n` +
+        `If you cannot read the value clearly, use null and set confidence to "low".`,
+      tach:
+        `You are reading a close-up photo of an aircraft tachometer. Ignore ` +
+        `the RPM needle and the RPM scale entirely. Read ONLY the small ` +
+        `hour-meter digit wheels inside the gauge face (marked HOURS; the ` +
+        `rightmost digit is tenths, e.g. 656.4). Ignore glare, reflections, ` +
+        `and any "OIL DUE" sticker or other labels.\n` +
+        `Return ONLY valid JSON: {"hobbs": null, "tach": 656.4, "confidence": "high"}\n` +
+        `If you cannot read the value clearly, use null and set confidence to "low".`,
+      both:
+        `You are reading aircraft instrument gauges from a cockpit photo.\n` +
+        `Find the Hobbs meter (Datcon "ELAPSED TIME" digit wheels; rightmost ` +
+        `digit is tenths, e.g. 4615.8) and the tachometer's hour meter (small ` +
+        `digit window marked HOURS inside the RPM gauge; rightmost digit is ` +
+        `tenths, e.g. 656.4). Ignore the RPM needle and any "OIL DUE" sticker.\n` +
+        `Return ONLY valid JSON: {"hobbs": 4615.8, "tach": 656.4, "confidence": "high"}\n` +
+        `If you cannot read a value clearly, use null and set confidence to "low".`,
+    };
+    const prompt = prompts[target];
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

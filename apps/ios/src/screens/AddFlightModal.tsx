@@ -50,8 +50,9 @@ export function AddFlightModal({ navigation }: Props) {
   const [showOther, setShowOther] = useState(false);
   const [hobbsEnd, setHobbsEnd] = useState('');
   const [tachEnd, setTachEnd] = useState('');
-  const [aiConfidence, setAiConfidence] = useState<'high' | 'low' | null>(null);
-  const [readingPhoto, setReadingPhoto] = useState(false);
+  const [hobbsConfidence, setHobbsConfidence] = useState<'high' | 'low' | null>(null);
+  const [tachConfidence, setTachConfidence] = useState<'high' | 'low' | null>(null);
+  const [readingGauge, setReadingGauge] = useState<'hobbs' | 'tach' | null>(null);
   const [notes, setNotes] = useState('');
   const [oilAdded, setOilAdded] = useState(false);
   const [lastReading, setLastReading] = useState<LastReading | null>(null);
@@ -73,7 +74,7 @@ export function AddFlightModal({ navigation }: Props) {
   const tachNum = tachEnd ? Number(tachEnd) : null;
   const canSubmit = pilot && validDestination && hobbsNum !== null && tachNum !== null && !submitting;
 
-  const handleTakePhoto = async () => {
+  const handleTakePhoto = async (gauge: 'hobbs' | 'tach') => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert('Camera access', 'Allow camera in Settings to use AI gauge reading.');
@@ -85,17 +86,26 @@ export function AddFlightModal({ navigation }: Props) {
       base64: true,
     });
     if (result.canceled || !result.assets[0]?.base64) return;
-    setReadingPhoto(true);
-    setAiConfidence(null);
+    setReadingGauge(gauge);
     try {
-      const reading: GaugeReading = await readGauges(result.assets[0].base64, 'image/jpeg');
-      if (reading.hobbs !== null) setHobbsEnd(String(reading.hobbs));
-      if (reading.tach !== null) setTachEnd(String(reading.tach));
-      setAiConfidence(reading.confidence);
+      const reading: GaugeReading = await readGauges(result.assets[0].base64, 'image/jpeg', gauge);
+      const value = gauge === 'hobbs' ? reading.hobbs : reading.tach;
+      if (gauge === 'hobbs') {
+        if (value !== null) setHobbsEnd(String(value));
+        setHobbsConfidence(reading.confidence);
+      } else {
+        if (value !== null) setTachEnd(String(value));
+        setTachConfidence(reading.confidence);
+      }
+      if (value === null) {
+        Alert.alert('Could not read gauge', 'Try getting closer or reducing glare, or enter the value manually.');
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (err) {
-      Alert.alert('AI read failed', err instanceof Error ? err.message : 'Try entering values manually.');
+      Alert.alert('AI read failed', err instanceof Error ? err.message : 'Try entering the value manually.');
     } finally {
-      setReadingPhoto(false);
+      setReadingGauge(null);
     }
   };
 
@@ -209,43 +219,73 @@ export function AddFlightModal({ navigation }: Props) {
     </>
   );
 
-  const renderStep2 = () => (
-    <>
-      <Text style={styles.label}>Capture gauge photo</Text>
-      <Pressable onPress={handleTakePhoto} disabled={readingPhoto} style={[styles.btn, styles.btnPrimary]}>
-        {readingPhoto ? <ActivityIndicator color="#ffffff" /> : (
-          <Text style={[styles.btnTxt, { color: '#ffffff' }]}>📷  Take photo</Text>
-        )}
-      </Pressable>
-      {aiConfidence && (
-        <Text style={[styles.muted, { marginTop: spacing.sm, color: aiConfidence === 'high' ? colors.green : colors.amber }]}>
-          AI confidence: {aiConfidence}
-        </Text>
-      )}
-
-      <Text style={[styles.label, { marginTop: spacing.lg }]}>or enter manually</Text>
-      <View style={styles.twoCol}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.subLabel}>Hobbs end</Text>
+  const renderGaugeCard = (
+    gauge: 'hobbs' | 'tach',
+    title: string,
+    hint: string,
+    value: string,
+    setValue: (v: string) => void,
+    confidence: 'high' | 'low' | null,
+    placeholder: string
+  ) => {
+    const busy = readingGauge === gauge;
+    const hasValue = value.length > 0;
+    return (
+      <View style={styles.gaugeCard}>
+        <Text style={styles.label}>{title}</Text>
+        <Text style={[styles.muted, { marginTop: 2 }]}>{hint}</Text>
+        <Pressable
+          onPress={() => handleTakePhoto(gauge)}
+          disabled={readingGauge !== null}
+          style={[styles.btn, styles.btnPrimary, { marginTop: spacing.sm, opacity: readingGauge !== null && !busy ? 0.5 : 1 }]}
+        >
+          {busy ? <ActivityIndicator color="#ffffff" /> : (
+            <Text style={[styles.btnTxt, { color: '#ffffff' }]}>
+              📷  {hasValue ? 'Retake photo' : `Capture ${title}`}
+            </Text>
+          )}
+        </Pressable>
+        <View style={[styles.twoCol, { marginTop: spacing.sm, alignItems: 'center' }]}>
           <TextInput
-            value={hobbsEnd}
-            onChangeText={setHobbsEnd}
-            placeholder="456.3"
+            value={value}
+            onChangeText={setValue}
+            placeholder={placeholder}
             keyboardType="decimal-pad"
-            style={styles.input}
+            style={[styles.input, { flex: 1 }]}
           />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.subLabel}>Tach end</Text>
-          <TextInput
-            value={tachEnd}
-            onChangeText={setTachEnd}
-            placeholder="63.1"
-            keyboardType="decimal-pad"
-            style={styles.input}
-          />
+          {confidence && (
+            <Text style={[styles.muted, { color: confidence === 'high' ? colors.green : colors.amber }]}>
+              {confidence === 'high' ? '✓ high confidence' : '⚠ low — verify'}
+            </Text>
+          )}
         </View>
       </View>
+    );
+  };
+
+  const renderStep2 = () => (
+    <>
+      {renderGaugeCard(
+        'hobbs',
+        'Hobbs',
+        'Get close to the ELAPSED TIME digit wheels; avoid glare.',
+        hobbsEnd,
+        setHobbsEnd,
+        hobbsConfidence,
+        '456.3'
+      )}
+      {renderGaugeCard(
+        'tach',
+        'Tach',
+        'Fill the frame with the HOURS window inside the RPM gauge.',
+        tachEnd,
+        setTachEnd,
+        tachConfidence,
+        '63.1'
+      )}
+      <Text style={[styles.muted, { marginTop: spacing.xs }]}>
+        Confirm each value before continuing — you can edit either field.
+      </Text>
     </>
   );
 
@@ -398,6 +438,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   twoCol: { flexDirection: 'row', gap: spacing.md },
+  gaugeCard: {
+    padding: spacing.md,
+    backgroundColor: colors.bgAlt,
+    borderRadius: radius.card,
+    borderColor: colors.border,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
   muted: { color: colors.muted, fontSize: font.label },
 
   readonlyChip: {
