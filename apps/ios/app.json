@@ -3,12 +3,12 @@
     "name": "AV8 Scheduler",
     "slug": "av8-scheduler",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.dealeraddendums.av8scheduler",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to photograph Hobbs and Tach meters for flight logging",
         "NSPhotoLibraryUsageDescription": "Used to select gauge photos for flight logging",

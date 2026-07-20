@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -113,6 +114,12 @@ export function FlightLogScreen() {
 
   const firstName = (session?.name ?? 'Pilot').split(' ')[0];
 
+  // On wide screens (iPad, landscape) keep content in a readable centered
+  // column instead of stretching edge to edge.
+  const { width } = useWindowDimensions();
+  const padH = width >= 700 ? Math.max(spacing.lg, (width - 640) / 2) : spacing.lg;
+  const wide = { paddingHorizontal: padH };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -129,7 +136,7 @@ export function FlightLogScreen() {
     <View style={styles.root}>
       {/* Hero */}
       <SafeAreaView edges={['top']} style={styles.hero}>
-        <View style={styles.heroInner}>
+        <View style={[styles.heroInner, wide]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroGreeting}>
               {greeting()}, {firstName}
@@ -145,7 +152,7 @@ export function FlightLogScreen() {
         </View>
 
         {/* Floating stat tiles */}
-        <View style={styles.tileRow}>
+        <View style={[styles.tileRow, wide]}>
           <View style={styles.tile}>
             <Text style={styles.tileValue}>
               {totals ? totals.since_annual_hobbs.toFixed(1) : '—'}
@@ -177,11 +184,12 @@ export function FlightLogScreen() {
       )}
 
       {/* Activity */}
-      <View style={styles.activityHeader}>
+      <View style={[styles.activityHeader, wide]}>
         <Text style={styles.activityTitle}>Recent Activity</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
           contentContainerStyle={styles.filterRow}
         >
           {[{ id: ALL, name: 'All' }, ...pilots.map((p) => ({ id: p.id, name: p.name }))].map((p) => {
@@ -203,7 +211,7 @@ export function FlightLogScreen() {
         data={visible}
         keyExtractor={(it) => (it.kind === 'flight' ? `f-${it.data.id}` : `m-${it.data.id}`)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={[styles.listContent, visible.length === 0 && styles.empty]}
+        contentContainerStyle={[styles.listContent, wide, visible.length === 0 && styles.empty]}
         ListEmptyComponent={() => (
           <View style={styles.empty}>
             <Text style={styles.emptyGlyph}>✈️</Text>
@@ -338,7 +346,8 @@ const styles = StyleSheet.create({
   },
   activityTitle: { fontSize: font.pageTitle, fontWeight: '600', color: colors.text },
 
-  filterRow: { gap: spacing.sm, paddingBottom: spacing.sm },
+  filterScroll: { flexGrow: 0 },
+  filterRow: { gap: spacing.sm, paddingBottom: spacing.sm, alignItems: 'center' },
   filterChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
