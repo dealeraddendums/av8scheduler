@@ -43,8 +43,21 @@ function shortDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function oilColor(remaining: number): string {
+  if (remaining < 10) return colors.red;
+  if (remaining < 25) return colors.amber;
+  return colors.green;
+}
+
 export function FlightLogScreen() {
-  const { pilots } = useAuth();
+  const { session, pilots } = useAuth();
   const navigation = useNavigation<any>();
   const queueCount = useOfflineQueueCount();
 
@@ -98,9 +111,11 @@ export function FlightLogScreen() {
     return merged.filter((it) => (it.kind === 'flight' ? it.data.pilot_id : it.data.pilot_id) === filter);
   }, [merged, filter]);
 
+  const firstName = (session?.name ?? 'Pilot').split(' ')[0];
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.centered}>
           <ActivityIndicator color={colors.navyAlt} />
         </View>
@@ -108,49 +123,92 @@ export function FlightLogScreen() {
     );
   }
 
+  const oilRemaining = totals?.oil_summary.tach_remaining ?? null;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.root}>
+      {/* Hero */}
+      <SafeAreaView edges={['top']} style={styles.hero}>
+        <View style={styles.heroInner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroGreeting}>
+              {greeting()}, {firstName}
+            </Text>
+            <Text style={styles.heroPlane}>N4368V · 1984 Piper Archer II</Text>
+          </View>
+          <Pressable
+            onPress={() => navigation.navigate('AddFlightModal')}
+            style={styles.heroCta}
+          >
+            <Text style={styles.heroCtaTxt}>✈️  Log Flight</Text>
+          </Pressable>
+        </View>
+
+        {/* Floating stat tiles */}
+        <View style={styles.tileRow}>
+          <View style={styles.tile}>
+            <Text style={styles.tileValue}>
+              {totals ? totals.since_annual_hobbs.toFixed(1) : '—'}
+            </Text>
+            <Text style={styles.tileLabel}>Hobbs since annual</Text>
+          </View>
+          <View style={styles.tile}>
+            <Text
+              style={[
+                styles.tileValue,
+                oilRemaining !== null && { color: oilColor(oilRemaining) },
+              ]}
+            >
+              {oilRemaining !== null ? oilRemaining.toFixed(1) : '—'}
+            </Text>
+            <Text style={styles.tileLabel}>Oil hrs left</Text>
+          </View>
+          <View style={styles.tile}>
+            <Text style={styles.tileValue}>{flights.length}</Text>
+            <Text style={styles.tileLabel}>Flights logged</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+
       {queueCount > 0 && (
         <View style={styles.queueBanner}>
           <Text style={styles.queueTxt}>{queueCount} pending sync</Text>
         </View>
       )}
 
-      {totals && (
-        <View style={styles.statsCard}>
-          <Text style={styles.statsLabel}>SINCE ANNUAL</Text>
-          <Text style={styles.statsValue}>
-            {totals.since_annual_hobbs.toFixed(1)}  Hobbs · {totals.since_annual_tach.toFixed(1)} Tach
-          </Text>
-          <Text style={styles.statsMuted}>
-            Oil {totals.oil_summary.tach_remaining.toFixed(1)} hrs remaining
-          </Text>
-        </View>
-      )}
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {[{ id: ALL, name: 'All' }, ...pilots.map((p) => ({ id: p.id, name: p.name }))].map((p) => {
-          const active = filter === p.id;
-          return (
-            <Pressable
-              key={p.id}
-              onPress={() => setFilter(p.id)}
-              style={[styles.filterChip, active && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterTxt, active && styles.filterTxtActive]}>{p.name}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {/* Activity */}
+      <View style={styles.activityHeader}>
+        <Text style={styles.activityTitle}>Recent Activity</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {[{ id: ALL, name: 'All' }, ...pilots.map((p) => ({ id: p.id, name: p.name }))].map((p) => {
+            const active = filter === p.id;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => setFilter(p.id)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterTxt, active && styles.filterTxtActive]}>{p.name}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       <FlatList
         data={visible}
         keyExtractor={(it) => (it.kind === 'flight' ? `f-${it.data.id}` : `m-${it.data.id}`)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={visible.length === 0 ? styles.empty : undefined}
+        contentContainerStyle={[styles.listContent, visible.length === 0 && styles.empty]}
         ListEmptyComponent={() => (
           <View style={styles.empty}>
-            <Text style={styles.emptyTxt}>No flights logged yet</Text>
+            <Text style={styles.emptyGlyph}>✈️</Text>
+            <Text style={styles.emptyTxt}>No flights yet</Text>
+            <Text style={styles.emptySub}>Tap “Log Flight” after your next trip.</Text>
           </View>
         )}
         renderItem={({ item }) => {
@@ -158,18 +216,18 @@ export function FlightLogScreen() {
             const f = item.data;
             return (
               <Pressable
-                style={styles.row}
+                style={styles.card}
                 onPress={() => navigation.navigate('FlightDetail', { id: f.id })}
               >
-                <View style={[styles.pilotDot, { backgroundColor: pilotColorFor(f.pilot_id, pilots) }]} />
+                <View style={[styles.pilotStripe, { backgroundColor: pilotColorFor(f.pilot_id, pilots) }]} />
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTopLine}>
                     <Text style={styles.icao}>{f.destination.toUpperCase()}</Text>
                     <Text style={styles.rowDate}>{shortDate(f.date)}</Text>
                   </View>
                   <Text style={styles.rowMuted}>
-                    +{Number(f.hobbs_used ?? 0).toFixed(1)} H · +{Number(f.tach_used ?? 0).toFixed(1)} T
-                    {Number(f.oil_added_qts ?? 0) > 0 && `  · +${Number(f.oil_added_qts).toFixed(1)} qt`}
+                    {f.pilot_name} · +{Number(f.hobbs_used ?? 0).toFixed(1)} Hobbs · +{Number(f.tach_used ?? 0).toFixed(1)} Tach
+                    {Number(f.oil_added_qts ?? 0) > 0 && `  · +${Number(f.oil_added_qts).toFixed(1)} qt oil`}
                   </Text>
                 </View>
                 <View style={styles.rowRight}>
@@ -183,7 +241,8 @@ export function FlightLogScreen() {
           const isOil = e.type === 'oil_change';
           const accent = isOil ? colors.amber : colors.navyAlt;
           return (
-            <View style={[styles.row, { borderLeftWidth: 2, borderLeftColor: accent }]}>
+            <View style={styles.card}>
+              <View style={[styles.pilotStripe, { backgroundColor: accent }]} />
               <Text style={[styles.mIcon, { color: accent }]}>{isOil ? '🛢' : '🛡'}</Text>
               <View style={{ flex: 1 }}>
                 <View style={styles.rowTopLine}>
@@ -204,52 +263,113 @@ export function FlightLogScreen() {
           );
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
+const TILE_OVERLAP = 34;
+
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bgAlt },
   container: { flex: 1, backgroundColor: colors.bg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  queueBanner: { backgroundColor: colors.amber, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  queueTxt: { color: '#ffffff', fontSize: font.body, fontWeight: '500' },
-
-  statsCard: {
-    margin: spacing.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
+  hero: {
+    backgroundColor: colors.navy,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingBottom: TILE_OVERLAP + spacing.md,
+    marginBottom: -TILE_OVERLAP,
+  },
+  heroInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  heroGreeting: { color: '#ffffff', fontSize: 24, fontWeight: '700' },
+  heroPlane: { color: colors.blueGray, fontSize: font.label, marginTop: 4, letterSpacing: 0.5 },
+  heroCta: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderColor: 'rgba(255,255,255,0.25)',
     borderWidth: 1,
     borderRadius: radius.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
-  statsLabel: { color: colors.muted, fontSize: font.label, letterSpacing: 1 },
-  statsValue: { color: colors.text, fontSize: 22, fontWeight: '600', marginTop: spacing.xs },
-  statsMuted: { color: colors.muted, fontSize: font.label, marginTop: spacing.xs },
+  heroCtaTxt: { color: '#ffffff', fontSize: font.body, fontWeight: '600' },
 
-  filterRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.md },
+  tileRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    transform: [{ translateY: TILE_OVERLAP }],
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    borderRadius: radius.card + 2,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+    shadowColor: '#0f2744',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  tileValue: { fontSize: 20, fontWeight: '700', color: colors.text, fontVariant: ['tabular-nums'] },
+  tileLabel: { fontSize: 11, color: colors.muted, marginTop: 2, textAlign: 'center' },
+
+  queueBanner: {
+    backgroundColor: colors.amber,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: TILE_OVERLAP,
+  },
+  queueTxt: { color: '#ffffff', fontSize: font.body, fontWeight: '500' },
+
+  activityHeader: {
+    marginTop: TILE_OVERLAP + spacing.md,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  activityTitle: { fontSize: font.pageTitle, fontWeight: '600', color: colors.text },
+
+  filterRow: { gap: spacing.sm, paddingBottom: spacing.sm },
   filterChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
-    borderRadius: radius.button,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.bg,
   },
   filterChipActive: { backgroundColor: colors.navyAlt, borderColor: colors.navyAlt },
   filterTxt: { color: colors.text, fontSize: 13 },
   filterTxtActive: { color: '#ffffff' },
 
-  row: {
+  listContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.xs },
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
+    paddingRight: spacing.md,
+    paddingLeft: 0,
+    marginBottom: spacing.sm,
     backgroundColor: colors.bg,
+    borderRadius: radius.card + 2,
+    overflow: 'hidden',
+    shadowColor: '#0f2744',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  pilotDot: { width: 12, height: 12, borderRadius: radius.pilotDot },
+  pilotStripe: { alignSelf: 'stretch', width: 4, borderRadius: 2 },
   rowTopLine: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   icao: { fontSize: font.body, fontWeight: '600', color: colors.navyAlt, fontFamily: 'Menlo' },
   rowDate: { fontSize: font.label, color: colors.muted },
@@ -257,9 +377,11 @@ const styles = StyleSheet.create({
   rowRight: { alignItems: 'flex-end' },
   rowEndVal: { fontSize: font.body, color: colors.navyAlt, fontVariant: ['tabular-nums'] },
   rowEndLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase' },
-  mIcon: { fontSize: 16, width: 12 },
+  mIcon: { fontSize: 16, width: 16, marginLeft: spacing.sm },
   mLabel: { fontWeight: '500' },
 
   empty: { padding: spacing.xl, alignItems: 'center', justifyContent: 'center', flex: 1 },
-  emptyTxt: { color: colors.muted, fontSize: font.body },
+  emptyGlyph: { fontSize: 40, marginBottom: spacing.sm },
+  emptyTxt: { color: colors.text, fontSize: font.body, fontWeight: '600' },
+  emptySub: { color: colors.muted, fontSize: font.label, marginTop: 2 },
 });
