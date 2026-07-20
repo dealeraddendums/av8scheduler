@@ -1516,12 +1516,79 @@ app.delete("/make-server-82b8c834/flights/:id", async (c) => {
 app.post("/make-server-82b8c834/read-gauges", async (c) => {
   try {
     const body = await c.req.json();
-    const { image_base64, media_type, gauge } = body ?? {};
+    const { image_base64, media_type, gauge, destination } = body ?? {};
     if (!image_base64 || !media_type) {
       return c.json({ error: "image_base64 and media_type are required" }, 400);
     }
     const target: "hobbs" | "tach" | "both" =
       gauge === "hobbs" || gauge === "tach" ? gauge : "both";
+
+    // Gather context to help the model disambiguate hard-to-read digit
+    // wheels: the meters only count up, so the previous flight's readings
+    // are a hard lower bound, and typical usage per destination bounds the
+    // expected delta.
+    let lastHobbs: number | null = null;
+    let lastTach: number | null = null;
+    let avgHobbsUsed: number | null = null;
+    let avgTachUsed: number | null = null;
+    try {
+      const { data: lastRow } = await supabase
+        .from("flights")
+        .select("hobbs_end, tach_end")
+        .order("date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastRow) {
+        lastHobbs = Number(lastRow.hobbs_end);
+        lastTach = Number(lastRow.tach_end);
+      }
+      if (destination && typeof destination === "string") {
+        const { data: destRows } = await supabase
+          .from("flights")
+          .select("hobbs_used, tach_used")
+          .eq("destination", destination.toUpperCase())
+          .not("hobbs_used", "is", null)
+          .order("date", { ascending: false })
+          .limit(10);
+        if (destRows && destRows.length > 0) {
+          const hs = destRows.map((r) => Number(r.hobbs_used)).filter((n) => n > 0);
+          const ts = destRows
+            .map((r) => (r.tach_used === null ? null : Number(r.tach_used)))
+            .filter((n): n is number => n !== null && n > 0);
+          if (hs.length > 0) avgHobbsUsed = hs.reduce((a, b) => a + b, 0) / hs.length;
+          if (ts.length > 0) avgTachUsed = ts.reduce((a, b) => a + b, 0) / ts.length;
+        }
+      }
+    } catch (ctxErr) {
+      // Context is best-effort; never block the read on it.
+      console.error("read-gauges context fetch failed:", ctxErr);
+    }
+
+    const round1 = (n: number) => Math.round(n * 10) / 10;
+    const contextLines: string[] = [];
+    if (lastHobbs !== null && (target === "hobbs" || target === "both")) {
+      contextLines.push(
+        `The Hobbs meter read ${lastHobbs.toFixed(1)} after the previous flight, so the new value MUST be greater than or equal to ${lastHobbs.toFixed(1)}.` +
+          (avgHobbsUsed !== null
+            ? ` Flights to ${String(destination).toUpperCase()} typically add about ${round1(avgHobbsUsed).toFixed(1)} hours, so expect a value near ${round1(lastHobbs + avgHobbsUsed).toFixed(1)}.`
+            : ` A single flight typically adds 0.5 to 6 hours.`)
+      );
+    }
+    if (lastTach !== null && (target === "tach" || target === "both")) {
+      contextLines.push(
+        `The tach hour meter read ${lastTach.toFixed(1)} after the previous flight, so the new value MUST be greater than or equal to ${lastTach.toFixed(1)}.` +
+          (avgTachUsed !== null
+            ? ` Flights to ${String(destination).toUpperCase()} typically add about ${round1(avgTachUsed).toFixed(1)} hours, so expect a value near ${round1(lastTach + avgTachUsed).toFixed(1)}.`
+            : ` A single flight typically adds 0.5 to 6 hours.`)
+      );
+    }
+    const contextBlock =
+      contextLines.length > 0
+        ? `\nKnown context (use it to disambiguate partially visible or mid-roll digits — ` +
+          `e.g. an obscured leading digit — but NEVER contradict digits that are clearly ` +
+          `legible in the photo):\n- ${contextLines.join("\n- ")}\n`
+        : "";
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) {
@@ -1558,7 +1625,7 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
         `Return ONLY valid JSON: {"hobbs": 4615.8, "tach": 656.4, "confidence": "high"}\n` +
         `If you cannot read a value clearly, use null and set confidence to "low".`,
     };
-    const prompt = prompts[target];
+    const prompt = prompts[target] + contextBlock;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1594,13 +1661,33 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
     const result = await resp.json();
     const text: string = result?.content?.[0]?.text ?? "";
 
-    let parsed: { hobbs: number | null; tach: number | null; confidence: "high" | "low" };
+    let parsed: {
+      hobbs: number | null;
+      tach: number | null;
+      confidence: "high" | "low";
+      warning?: string;
+    };
     try {
       const match = text.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(match ? match[0] : text);
     } catch (_e) {
       parsed = { hobbs: null, tach: null, confidence: "low" };
     }
+
+    // Sanity-check against known context: meters only count up, and a
+    // single flight can't plausibly add more than ~15 hours.
+    const check = (value: number | null, last: number | null, name: string) => {
+      if (value === null || last === null) return;
+      if (value < last) {
+        parsed.confidence = "low";
+        parsed.warning = `${name} reads ${value.toFixed(1)} but the previous flight ended at ${last.toFixed(1)} — verify against the gauge.`;
+      } else if (value - last > 15) {
+        parsed.confidence = "low";
+        parsed.warning = `${name} jumped ${(value - last).toFixed(1)} hours since the last flight — verify against the gauge.`;
+      }
+    };
+    check(parsed.hobbs, lastHobbs, "Hobbs");
+    if (!parsed.warning) check(parsed.tach, lastTach, "Tach");
 
     return c.json(parsed);
   } catch (error) {

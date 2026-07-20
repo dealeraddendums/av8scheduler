@@ -79,6 +79,8 @@ export interface GaugeReading {
   hobbs: number | null;
   tach: number | null;
   confidence: 'high' | 'low';
+  /** Present when the reading conflicts with known context (e.g. below the previous reading). */
+  warning?: string;
 }
 
 export interface MaintenanceEvent {
@@ -226,12 +228,14 @@ export type GaugeTarget = 'hobbs' | 'tach' | 'both';
 export async function readGauges(
   base64: string,
   mediaType: string,
-  gauge: GaugeTarget = 'both'
+  gauge: GaugeTarget = 'both',
+  destination?: string
 ): Promise<GaugeReading> {
   return apiPost<GaugeReading>('/read-gauges', {
     image_base64: base64,
     media_type: mediaType,
     gauge,
+    ...(destination ? { destination } : {}),
   });
 }
 

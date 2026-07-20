@@ -88,7 +88,12 @@ export function AddFlightModal({ navigation }: Props) {
     if (result.canceled || !result.assets[0]?.base64) return;
     setReadingGauge(gauge);
     try {
-      const reading: GaugeReading = await readGauges(result.assets[0].base64, 'image/jpeg', gauge);
+      const reading: GaugeReading = await readGauges(
+        result.assets[0].base64,
+        'image/jpeg',
+        gauge,
+        effectiveDestination || undefined
+      );
       const value = gauge === 'hobbs' ? reading.hobbs : reading.tach;
       if (gauge === 'hobbs') {
         if (value !== null) setHobbsEnd(String(value));
@@ -99,6 +104,8 @@ export function AddFlightModal({ navigation }: Props) {
       }
       if (value === null) {
         Alert.alert('Could not read gauge', 'Try getting closer or reducing glare, or enter the value manually.');
+      } else if (reading.warning) {
+        Alert.alert('Check this reading', reading.warning);
       } else {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
