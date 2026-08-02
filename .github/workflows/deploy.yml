@@ -29,12 +29,29 @@ jobs:
       - name: Build web
         run: pnpm --filter @av8/web build
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+
+      # The instance's SG ("Web and VPN Only") keeps port 22 closed to the
+      # internet; open it to this runner's IP for the duration of the deploy.
+      - name: Open SSH to this runner
+        id: sg
+        run: |
+          RUNNER_IP=$(curl -fsS https://checkip.amazonaws.com)
+          echo "ip=$RUNNER_IP" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id sg-089ce2f70cc022379 \
+            --protocol tcp --port 22 --cidr "$RUNNER_IP/32"
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # ssh-keyscan is occasionally flaky from Actions runners — retry
           for i in 1 2 3 4 5; do
             ssh-keyscan -T 10 -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts && break
             echo "ssh-keyscan attempt $i failed; retrying in 5s…"
@@ -49,3 +66,10 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             apps/web/dist/ \
             ubuntu@${{ secrets.EC2_IP }}:/var/www/n4368v/
+
+      - name: Close SSH to this runner
+        if: always() && steps.sg.outputs.ip != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id sg-089ce2f70cc022379 \
+            --protocol tcp --port 22 --cidr "${{ steps.sg.outputs.ip }}/32"
