@@ -12,13 +12,13 @@
 | Supabase migration SQL | ✅ Done | supabase/migrations/001_flight_log.sql |
 | API routes | ✅ Done | All routes deployed as `make-server-82b8c834` (entrypoint `supabase/functions/make-server-82b8c834/index.ts`); verified 2026-05-26 |
 | nginx config | ✅ Done | deploy/nginx-n4368v.conf |
-| GitHub Actions | ✅ Done | .github/workflows/deploy.yml |
+| GitHub Actions | ✅ Done | .github/workflows/deploy.yml; 2026-08-02: opens SG port 22 to runner IP during deploy, revokes after (SG is VPN-locked) |
 | EC2 provisioned | ✅ Done | t3.micro us-west-1, Ubuntu 24.04 |
 | nginx installed + configured | ✅ Done | sites-enabled, default removed |
 | dist/ deployed | ✅ Done | rsync to /var/www/n4368v |
 | DNS propagated | ✅ Done | All 6 resolvers → 13.56.240.152 |
 | SSL / certbot | ✅ Done | Let's Encrypt cert issued 2026-05-26, expires 2026-08-24, auto-renew scheduled; HTTP→HTTPS redirect active |
-| GitHub secrets | ✅ Done | EC2_IP + SSH_PRIVATE_KEY set on dealeraddendums/av8scheduler |
+| GitHub secrets | ✅ Done | EC2_IP + SSH_PRIVATE_KEY set on dealeraddendums/av8scheduler; AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY added 2026-08-02 (IAM user `github-actions-n4368v-deploy`, scoped to SG ingress only) |
 | Supabase SQL run | ✅ Done | 001_flight_log.sql executed in dashboard (2026-05-26) |
 | Supabase storage bucket | ✅ Done | flight-photos (private) created 2026-05-26 |
 | Supabase ANTHROPIC_API_KEY | ✅ Done | Added to Edge Function secrets 2026-05-26 |
@@ -29,7 +29,7 @@
 
 - **EC2:** t3.micro, us-west-1, Ubuntu 24.04
 - **IP:** 13.56.240.152 (Elastic IP)
-- **SSH:** `ssh -i ~/ssh/n4368v2026.pem ubuntu@ec2-13-56-240-152.us-west-1.compute.amazonaws.com`
+- **SSH:** `ssh -i ~/ssh/n4368v2026.pem ubuntu@ec2-13-56-240-152.us-west-1.compute.amazonaws.com` — port 22 is VPN-only (SG `sg-089ce2f70cc022379` "Web and VPN Only" allows 22 from 34.202.235.98/32; deploy workflow opens/closes its runner IP per run)
 - **Web root:** `/var/www/n4368v`
 - **Domain:** n4368v.com → 13.56.240.152
 - **Supabase project:** `gigaittsnznvzppfqqer`
@@ -300,7 +300,7 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 1a | Figma migration (strip deps, build clean) | ✅ Done |
 | 1b | Supabase schema + API routes | ✅ Done |
 | 1c | EC2 + nginx + DNS + SSL | ✅ Done |
-| 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26) |
+| 1d | GitHub Actions live deploy | ✅ Done (dealeraddendums/av8scheduler, ~25s push-to-live, verified 2026-05-26; re-verified 2026-08-02 after SG went VPN-only — workflow now opens/closes port 22 to the runner IP per deploy, run #27 green) |
 | 2 | Web: FlightLog tab + all components | ✅ Done (2026-05-26) |
 | 3 | iOS: Expo monorepo + all screens | ✅ Scaffolded (2026-05-26) — auth, navigation, FlightLog/AddFlight/LogMaintenance/Admin screens, offline queue. expo-doctor: 21/21 checks pass. |
 | 4 | TestFlight build + distribution | ⏳ Pending manual steps (Allan): `eas login`, `eas build --platform ios --profile production` (NOT `preview` — internal dist can't submit to TestFlight), App Store Connect app creation (bundle ID `com.dealeraddendums.av8scheduler`), `eas submit --platform ios --latest`, add pilots as internal testers |
@@ -320,6 +320,8 @@ SUPABASE_ANON_KEY=eyJhbGci...
 # GitHub Actions secrets:
 EC2_IP=13.56.240.152
 SSH_PRIVATE_KEY=[contents of ~/ssh/n4368v2026.pem]
+AWS_ACCESS_KEY_ID=[IAM user github-actions-n4368v-deploy]
+AWS_SECRET_ACCESS_KEY=[IAM user github-actions-n4368v-deploy — can only authorize/revoke ingress on sg-089ce2f70cc022379]
 
 # Expo (apps/ios/.env — Phase 3):
 EXPO_PUBLIC_SUPABASE_URL=https://gigaittsnznvzppfqqer.supabase.co
