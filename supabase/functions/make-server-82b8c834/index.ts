@@ -1439,7 +1439,7 @@ app.post("/make-server-82b8c834/flights", async (c) => {
   try {
     const body = await c.req.json();
     console.log("POST /flights payload:", JSON.stringify(body));
-    const { pilot_id, pilot_name, date, destination, hobbs_end, tach_end, notes, photo_url } = body ?? {};
+    const { pilot_id, pilot_name, date, destination, hobbs_end, tach_end, notes, photo_url, oil_added_qts } = body ?? {};
 
     if (!pilot_id || !pilot_name || !date || !destination || hobbs_end === undefined || tach_end === undefined) {
       console.error("POST /flights validation failed:", { pilot_id, pilot_name, date, destination, hobbs_end, tach_end });
@@ -1479,6 +1479,7 @@ app.post("/make-server-82b8c834/flights", async (c) => {
       tach_used,
       notes: notes ?? null,
       photo_url: photo_url ?? null,
+      oil_added_qts: oil_added_qts === undefined || oil_added_qts === null ? 0 : Number(oil_added_qts),
     };
 
     const { data, error } = await supabase

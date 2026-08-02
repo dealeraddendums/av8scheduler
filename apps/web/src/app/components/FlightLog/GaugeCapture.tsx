@@ -5,10 +5,12 @@ import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { Camera, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
 import { apiPost } from '@av8/api';
-import type { GaugeReading } from '@av8/api';
+import type { GaugeReading, LastReading } from '@av8/api';
 
 interface GaugeCaptureProps {
   onResult: (hobbs: number | null, tach: number | null) => void;
+  /** Previous flight's readings — used as realistic placeholder examples. */
+  lastReading?: LastReading | null;
 }
 
 type ReadStatus = 'idle' | 'reading' | 'error' | 'done';
@@ -42,7 +44,11 @@ function parseNum(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function GaugeCapture({ onResult }: GaugeCaptureProps) {
+export function GaugeCapture({ onResult, lastReading }: GaugeCaptureProps) {
+  const hobbsExample =
+    lastReading && lastReading.hobbs_end > 0 ? `last ${lastReading.hobbs_end.toFixed(1)}` : 'e.g. 456.3';
+  const tachExample =
+    lastReading && lastReading.tach_end > 0 ? `last ${lastReading.tach_end.toFixed(1)}` : 'e.g. 63.1';
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mode A — AI read
@@ -201,7 +207,7 @@ export function GaugeCapture({ onResult }: GaugeCaptureProps) {
               type="number"
               inputMode="decimal"
               step="0.1"
-              placeholder="e.g. 456.3"
+              placeholder={hobbsExample}
               value={manHobbs ?? ''}
               onChange={(e) => setManHobbs(parseNum(e.target.value))}
               autoFocus={lowOrError}
@@ -214,7 +220,7 @@ export function GaugeCapture({ onResult }: GaugeCaptureProps) {
               type="number"
               inputMode="decimal"
               step="0.1"
-              placeholder="e.g. 63.1"
+              placeholder={tachExample}
               value={manTach ?? ''}
               onChange={(e) => setManTach(parseNum(e.target.value))}
             />

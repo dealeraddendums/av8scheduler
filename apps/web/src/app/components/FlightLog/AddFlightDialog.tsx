@@ -317,6 +317,7 @@ export function AddFlightDialog({
         {step === 2 && (
           <div className="space-y-3">
             <GaugeCapture
+              lastReading={lastReading}
               onResult={(h, t) => {
                 setHobbsEnd(h);
                 setTachEnd(t);
