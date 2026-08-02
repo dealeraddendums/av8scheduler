@@ -1449,6 +1449,25 @@ app.post("/make-server-82b8c834/flights", async (c) => {
     const hobbsEndNum = Number(hobbs_end);
     const tachEndNum = Number(tach_end);
 
+    // Idempotency guard: a client retry after a perceived failure can post
+    // the same flight twice. Identical pilot/date/destination/readings can
+    // never be two real flights (the meters always advance), so return the
+    // existing row instead of inserting a duplicate.
+    const { data: dup } = await supabase
+      .from("flights")
+      .select("*")
+      .eq("pilot_id", pilot_id)
+      .eq("date", String(date))
+      .eq("destination", String(destination).toUpperCase())
+      .eq("hobbs_end", hobbsEndNum)
+      .eq("tach_end", tachEndNum)
+      .limit(1)
+      .maybeSingle();
+    if (dup) {
+      console.log("POST /flights duplicate detected, returning existing row:", dup.id);
+      return c.json(dup);
+    }
+
     // Chronological predecessor: latest flight whose date <= new flight's date.
     // For same-date flights, ties broken by created_at desc. Falls back to the
     // annual baseline if no prior flight exists, so bulk-entered first flights
