@@ -145,6 +145,7 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
         loading={flightsHook.loading || maintenanceHook.loading}
         isAdmin={isAdmin}
         onDelete={flightsHook.deleteFlight}
+        onUpdate={flightsHook.updateFlight}
       />
 
       <AdminPanel

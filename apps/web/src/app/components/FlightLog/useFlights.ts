@@ -6,8 +6,9 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  updateFlight as apiUpdateFlight,
 } from '@av8/api';
-import type { Flight, FlightTotals, LastReading, NewFlightInput } from '@av8/api';
+import type { Flight, FlightTotals, LastReading, NewFlightInput, UpdateFlightInput } from '@av8/api';
 
 interface UseFlightsResult {
   flights: Flight[];
@@ -16,6 +17,7 @@ interface UseFlightsResult {
   error: string | null;
   refresh: () => Promise<void>;
   createFlight: (input: NewFlightInput) => Promise<Flight | null>;
+  updateFlight: (id: string, updates: UpdateFlightInput) => Promise<Flight | null>;
   deleteFlight: (id: string) => Promise<boolean>;
   fetchLastReading: () => Promise<LastReading>;
   exportCSV: () => Promise<void>;
@@ -89,6 +91,21 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
     }
   }, [refresh]);
 
+  const updateFlight = useCallback(
+    async (id: string, updates: UpdateFlightInput): Promise<Flight | null> => {
+      try {
+        const updated = await apiUpdateFlight(id, updates);
+        toast.success('Flight updated ✓');
+        await refresh();
+        return updated;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to update flight');
+        return null;
+      }
+    },
+    [refresh]
+  );
+
   const deleteFlight = useCallback(async (id: string): Promise<boolean> => {
     try {
       await apiDelete<{ success: true }>(`/flights/${encodeURIComponent(id)}`);
@@ -130,5 +147,5 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
     }
   }, []);
 
-  return { flights, totals, loading, error, refresh, createFlight, deleteFlight, fetchLastReading, exportCSV };
+  return { flights, totals, loading, error, refresh, createFlight, updateFlight, deleteFlight, fetchLastReading, exportCSV };
 }

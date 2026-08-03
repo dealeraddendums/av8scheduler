@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../ui/sheet';
 import {
   AlertDialog,
@@ -11,8 +13,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
-import { Trash2, Droplet, ShieldCheck } from 'lucide-react';
-import type { Destination, Flight, MaintenanceEvent } from '@av8/api';
+import { Trash2, Droplet, ShieldCheck, Pencil } from 'lucide-react';
+import type { Destination, Flight, MaintenanceEvent, UpdateFlightInput } from '@av8/api';
 
 interface FlightListProps {
   flights: Flight[];
@@ -22,6 +24,7 @@ interface FlightListProps {
   loading: boolean;
   isAdmin: boolean;
   onDelete: (id: string) => Promise<boolean> | void;
+  onUpdate?: (id: string, updates: UpdateFlightInput) => Promise<Flight | null>;
 }
 
 type Selection =
@@ -68,10 +71,68 @@ export function FlightList({
   loading,
   isAdmin,
   onDelete,
+  onUpdate,
 }: FlightListProps) {
   const [filter, setFilter] = useState<string>(ALL);
   const [selected, setSelected] = useState<Selection>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Edit mode state (flight sheet)
+  const [editMode, setEditMode] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [eDate, setEDate] = useState('');
+  const [eDest, setEDest] = useState('');
+  const [ePilotId, setEPilotId] = useState('');
+  const [eHobbs, setEHobbs] = useState('');
+  const [eTach, setETach] = useState('');
+  const [eNotes, setENotes] = useState('');
+  const [eOil, setEOil] = useState('');
+
+  const startEdit = (f: Flight) => {
+    setEDate(f.date);
+    setEDest(f.destination.toUpperCase());
+    setEPilotId(f.pilot_id);
+    setEHobbs(String(f.hobbs_end));
+    setETach(String(f.tach_end));
+    setENotes(f.notes ?? '');
+    setEOil(String(f.oil_added_qts ?? 0));
+    setEditMode(true);
+  };
+
+  const saveEdit = async (f: Flight) => {
+    if (!onUpdate) return;
+    const updates: UpdateFlightInput = {};
+    if (eDate && eDate !== f.date) updates.date = eDate;
+    const destUp = eDest.trim().toUpperCase();
+    if (destUp && destUp !== f.destination.toUpperCase()) updates.destination = destUp;
+    if (ePilotId && ePilotId !== f.pilot_id) {
+      const p = pilots.find((x) => x.id === ePilotId);
+      if (p) {
+        updates.pilot_id = p.id;
+        updates.pilot_name = p.name;
+      }
+    }
+    const hobbsNum = Number(eHobbs);
+    const tachNum = Number(eTach);
+    if (Number.isFinite(hobbsNum) && hobbsNum !== Number(f.hobbs_end)) updates.hobbs_end = hobbsNum;
+    if (Number.isFinite(tachNum) && tachNum !== Number(f.tach_end)) updates.tach_end = tachNum;
+    const notesVal = eNotes.trim() === '' ? null : eNotes.trim();
+    if (notesVal !== (f.notes ?? null)) updates.notes = notesVal;
+    const oilNum = Number(eOil);
+    if (Number.isFinite(oilNum) && oilNum !== Number(f.oil_added_qts ?? 0)) updates.oil_added_qts = oilNum;
+
+    if (Object.keys(updates).length === 0) {
+      setEditMode(false);
+      return;
+    }
+    setSavingEdit(true);
+    const result = await onUpdate(f.id, updates);
+    setSavingEdit(false);
+    if (result) {
+      setEditMode(false);
+      setSelected(null);
+    }
+  };
 
   const pilotColor = useMemo(() => {
     const map: Record<string, string> = {};
@@ -252,7 +313,10 @@ export function FlightList({
       <Sheet
         open={selected !== null}
         onOpenChange={(o) => {
-          if (!o) setSelected(null);
+          if (!o) {
+            setSelected(null);
+            setEditMode(false);
+          }
         }}
       >
         <SheetContent className="sm:max-w-md w-[92vw]">
@@ -274,6 +338,121 @@ export function FlightList({
                 <SheetDescription>{formatLong(selected.flight.date)}</SheetDescription>
               </SheetHeader>
 
+              {editMode ? (
+                <div className="mt-6 space-y-4 px-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="ef-date" className="text-xs">Date</Label>
+                      <Input
+                        id="ef-date"
+                        type="date"
+                        value={eDate}
+                        onChange={(ev) => setEDate(ev.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ef-dest" className="text-xs">Destination (ICAO)</Label>
+                      <Input
+                        id="ef-dest"
+                        value={eDest}
+                        onChange={(ev) => setEDest(ev.target.value.toUpperCase().slice(0, 5))}
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Pilot</Label>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {pilots.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setEPilotId(p.id)}
+                          className={`px-3 py-1.5 text-sm rounded-md border ${
+                            ePilotId === p.id
+                              ? 'bg-[#4E5166] text-white border-[#4E5166]'
+                              : 'bg-white text-[#4E5166] border-[rgba(78,81,102,0.2)] hover:bg-[#f8f8f8]'
+                          }`}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="ef-hobbs" className="text-xs">Hobbs end</Label>
+                      <Input
+                        id="ef-hobbs"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        value={eHobbs}
+                        onChange={(ev) => setEHobbs(ev.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ef-tach" className="text-xs">Tach end</Label>
+                      <Input
+                        id="ef-tach"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        value={eTach}
+                        onChange={(ev) => setETach(ev.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 items-end">
+                    <div>
+                      <Label htmlFor="ef-oil" className="text-xs">Oil added (qt)</Label>
+                      <Input
+                        id="ef-oil"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.5"
+                        min="0"
+                        value={eOil}
+                        onChange={(ev) => setEOil(ev.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ef-notes" className="text-xs">Notes</Label>
+                      <Input
+                        id="ef-notes"
+                        value={eNotes}
+                        onChange={(ev) => setENotes(ev.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-[#747274]">
+                    Changing the date or readings recalculates the Δ hours for every affected flight.
+                  </p>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setEditMode(false)}
+                      disabled={savingEdit}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1 bg-[#4E5166] hover:bg-[#3e4156] text-white"
+                      onClick={() => saveEdit(selected.flight)}
+                      disabled={savingEdit}
+                    >
+                      {savingEdit ? 'Saving…' : 'Save changes'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <div className="mt-6 space-y-4 px-4">
                 <div>
                   <div className="text-xs uppercase tracking-wide text-[#747274]">Pilot</div>
@@ -328,7 +507,17 @@ export function FlightList({
                 </div>
 
                 {isAdmin && (
-                  <div className="pt-4 border-t border-[rgba(78,81,102,0.2)]">
+                  <div className="pt-4 border-t border-[rgba(78,81,102,0.2)] space-y-2">
+                    {onUpdate && (
+                      <Button
+                        variant="outline"
+                        onClick={() => startEdit(selected.flight)}
+                        className="w-full gap-2 border-[rgba(78,81,102,0.2)] text-[#4E5166] hover:bg-[#f8f8f8]"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        Edit this flight
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       onClick={() => setConfirmDelete(true)}
@@ -340,6 +529,7 @@ export function FlightList({
                   </div>
                 )}
               </div>
+              )}
             </>
           )}
 

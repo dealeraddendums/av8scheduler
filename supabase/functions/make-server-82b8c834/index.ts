@@ -1519,6 +1519,92 @@ app.post("/make-server-82b8c834/flights", async (c) => {
   }
 });
 
+// Recompute the hobbs_used/tach_used delta chain for every flight.
+// Needed after edits that move a flight's date or change its readings,
+// since each flight's delta is relative to its chronological predecessor
+// (annual baseline for the first). Small table — full walk is fine.
+async function recomputeFlightDeltas(): Promise<void> {
+  const annual = await getAnnualBaseline();
+  const { data, error } = await supabase
+    .from("flights")
+    .select("id, hobbs_end, tach_end, hobbs_used, tach_used")
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  let prevHobbs = annual.hobbs;
+  let prevTach = annual.tach;
+  for (const f of data ?? []) {
+    const hobbsUsed = Math.round((Number(f.hobbs_end) - prevHobbs) * 10) / 10;
+    const tachUsed = Math.round((Number(f.tach_end) - prevTach) * 10) / 10;
+    if (Number(f.hobbs_used) !== hobbsUsed || Number(f.tach_used) !== tachUsed) {
+      const { error: upErr } = await supabase
+        .from("flights")
+        .update({ hobbs_used: hobbsUsed, tach_used: tachUsed })
+        .eq("id", f.id);
+      if (upErr) console.error("recomputeFlightDeltas update failed:", f.id, upErr);
+    }
+    prevHobbs = Number(f.hobbs_end);
+    prevTach = Number(f.tach_end);
+  }
+}
+
+app.patch("/make-server-82b8c834/flights/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+
+    const { data: existing, error: exErr } = await supabase
+      .from("flights")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (exErr) throw exErr;
+    if (!existing) return c.json({ error: "Flight not found" }, 404);
+
+    const updates: Record<string, unknown> = {};
+    if (body.date !== undefined) updates.date = String(body.date);
+    if (body.destination !== undefined)
+      updates.destination = String(body.destination).toUpperCase();
+    if (body.pilot_id !== undefined) updates.pilot_id = String(body.pilot_id);
+    if (body.pilot_name !== undefined) updates.pilot_name = String(body.pilot_name);
+    if (body.hobbs_end !== undefined) updates.hobbs_end = Number(body.hobbs_end);
+    if (body.tach_end !== undefined) updates.tach_end = Number(body.tach_end);
+    if (body.notes !== undefined) updates.notes = body.notes === null ? null : String(body.notes);
+    if (body.oil_added_qts !== undefined)
+      updates.oil_added_qts = body.oil_added_qts === null ? 0 : Number(body.oil_added_qts);
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: "No editable fields in request" }, 400);
+    }
+
+    const { error: upErr } = await supabase.from("flights").update(updates).eq("id", id);
+    if (upErr) {
+      console.error("PATCH /flights update error:", upErr);
+      return c.json({ error: upErr.message ?? String(upErr) }, 400);
+    }
+
+    // Date or reading changes shift the delta chain — recompute it.
+    if (
+      updates.date !== undefined ||
+      updates.hobbs_end !== undefined ||
+      updates.tach_end !== undefined
+    ) {
+      await recomputeFlightDeltas();
+    }
+
+    const { data: fresh } = await supabase
+      .from("flights")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    return c.json(fresh ?? { success: true });
+  } catch (err) {
+    console.error("PATCH /flights error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to update flight: ${msg}` }, 500);
+  }
+});
+
 app.delete("/make-server-82b8c834/flights/:id", async (c) => {
   try {
     const id = c.req.param("id");

@@ -106,6 +106,17 @@ export interface NewFlightInput {
   oil_added_qts?: number;
 }
 
+export interface UpdateFlightInput {
+  date?: string;
+  destination?: string;
+  pilot_id?: string;
+  pilot_name?: string;
+  hobbs_end?: number;
+  tach_end?: number;
+  notes?: string | null;
+  oil_added_qts?: number;
+}
+
 export interface NewMaintenanceInput {
   type: 'oil_change' | 'annual';
   pilot_id: string;
@@ -161,6 +172,29 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return parsed as T;
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let parsed: unknown = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = { raw: text };
+  }
+  if (!res.ok) {
+    const errMsg =
+      parsed && typeof parsed === 'object' && 'error' in parsed && typeof (parsed as { error: unknown }).error === 'string'
+        ? (parsed as { error: string }).error
+        : `PATCH ${path} failed: ${res.status}`;
+    throw new Error(errMsg);
+  }
+  return parsed as T;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) {
@@ -179,6 +213,10 @@ export async function fetchFlights(pilotId?: string): Promise<Flight[]> {
 
 export async function createFlight(payload: NewFlightInput): Promise<Flight> {
   return apiPost<Flight>('/flights', payload);
+}
+
+export async function updateFlight(id: string, updates: UpdateFlightInput): Promise<Flight> {
+  return apiPatch<Flight>(`/flights/${encodeURIComponent(id)}`, updates);
 }
 
 export async function deleteFlight(id: string): Promise<void> {
