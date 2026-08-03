@@ -1549,8 +1549,8 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
     // expected delta.
     let lastHobbs: number | null = null;
     let lastTach: number | null = null;
-    let avgHobbsUsed: number | null = null;
-    let avgTachUsed: number | null = null;
+    let hobbsBurns: number[] = [];
+    let tachBurns: number[] = [];
     try {
       const { data: lastRow } = await supabase
         .from("flights")
@@ -1572,12 +1572,10 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
           .order("date", { ascending: false })
           .limit(10);
         if (destRows && destRows.length > 0) {
-          const hs = destRows.map((r) => Number(r.hobbs_used)).filter((n) => n > 0);
-          const ts = destRows
+          hobbsBurns = destRows.map((r) => Number(r.hobbs_used)).filter((n) => n > 0);
+          tachBurns = destRows
             .map((r) => (r.tach_used === null ? null : Number(r.tach_used)))
             .filter((n): n is number => n !== null && n > 0);
-          if (hs.length > 0) avgHobbsUsed = hs.reduce((a, b) => a + b, 0) / hs.length;
-          if (ts.length > 0) avgTachUsed = ts.reduce((a, b) => a + b, 0) / ts.length;
         }
       }
     } catch (ctxErr) {
@@ -1586,28 +1584,53 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
     }
 
     const round1 = (n: number) => Math.round(n * 10) / 10;
-    const contextLines: string[] = [];
-    if (lastHobbs !== null && (target === "hobbs" || target === "both")) {
-      contextLines.push(
-        `The Hobbs meter read ${lastHobbs.toFixed(1)} after the previous flight, so the new value MUST be greater than or equal to ${lastHobbs.toFixed(1)}.` +
-          (avgHobbsUsed !== null
-            ? ` Flights to ${String(destination).toUpperCase()} typically add about ${round1(avgHobbsUsed).toFixed(1)} hours, so expect a value near ${round1(lastHobbs + avgHobbsUsed).toFixed(1)}.`
-            : ` A single flight typically adds 0.5 to 6 hours.`)
-      );
+
+    // Prediction first: expected value and plausible range per gauge,
+    // derived from the previous reading plus this destination's history.
+    interface Expectation {
+      last: number;
+      expected: number | null;
+      lo: number; // plausible minimum for the new reading
+      hi: number; // plausible maximum
     }
-    if (lastTach !== null && (target === "tach" || target === "both")) {
-      contextLines.push(
-        `The tach hour meter read ${lastTach.toFixed(1)} after the previous flight, so the new value MUST be greater than or equal to ${lastTach.toFixed(1)}.` +
-          (avgTachUsed !== null
-            ? ` Flights to ${String(destination).toUpperCase()} typically add about ${round1(avgTachUsed).toFixed(1)} hours, so expect a value near ${round1(lastTach + avgTachUsed).toFixed(1)}.`
-            : ` A single flight typically adds 0.5 to 6 hours.`)
-      );
-    }
+    const expectation = (last: number | null, burns: number[]): Expectation | null => {
+      if (last === null) return null;
+      if (burns.length > 0) {
+        const avg = burns.reduce((a, b) => a + b, 0) / burns.length;
+        const min = Math.min(...burns);
+        const max = Math.max(...burns);
+        // Pad the observed range: half the shortest burn below, double-ish above.
+        return {
+          last,
+          expected: round1(last + avg),
+          lo: round1(last + Math.max(0.1, min * 0.5)),
+          hi: round1(last + Math.max(max * 1.5, avg + 2)),
+        };
+      }
+      return { last, expected: null, lo: round1(last + 0.1), hi: round1(last + 8) };
+    };
+    const hobbsExp = target !== "tach" ? expectation(lastHobbs, hobbsBurns) : null;
+    const tachExp = target !== "hobbs" ? expectation(lastTach, tachBurns) : null;
+
+    const expLine = (name: string, e: Expectation, dest?: string) =>
+      `${name}: previous reading ${e.last.toFixed(1)}. ` +
+      (e.expected !== null
+        ? `Based on ${dest ? `typical flights to ${dest}` : "history"}, the new value is most likely near ${e.expected.toFixed(1)}, and almost certainly between ${e.lo.toFixed(1)} and ${e.hi.toFixed(1)}.`
+        : `The new value must be above ${e.last.toFixed(1)} and is almost certainly between ${e.lo.toFixed(1)} and ${e.hi.toFixed(1)}.`);
+
+    const destName = destination ? String(destination).toUpperCase() : undefined;
+    const expLines: string[] = [];
+    if (hobbsExp) expLines.push(expLine("Hobbs", hobbsExp, destName));
+    if (tachExp) expLines.push(expLine("Tach hour meter", tachExp, destName));
+
     const contextBlock =
-      contextLines.length > 0
-        ? `\nKnown context (use it to disambiguate partially visible or mid-roll digits — ` +
-          `e.g. an obscured leading digit — but NEVER contradict digits that are clearly ` +
-          `legible in the photo):\n- ${contextLines.join("\n- ")}\n`
+      expLines.length > 0
+        ? `BEFORE looking at the photo, know what to expect:\n- ${expLines.join("\n- ")}\n\n` +
+          `Method: first read every digit you can see. Then reconcile: aircraft meters only ` +
+          `count up, so any digit that is blurry, mid-roll, glared out, or cropped should be ` +
+          `resolved to the value consistent with the expected range above. For example, if ` +
+          `the wheels show ?621.8 and the expected value is near 4621.5, the reading is 4621.8. ` +
+          `Only contradict the expected range if every digit is sharply legible.\n\n`
         : "";
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -1645,7 +1668,7 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
         `Return ONLY valid JSON: {"hobbs": 4615.8, "tach": 656.4, "confidence": "high"}\n` +
         `If you cannot read a value clearly, use null and set confidence to "low".`,
     };
-    const prompt = prompts[target] + contextBlock;
+    const prompt = contextBlock + prompts[target];
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1708,6 +1731,31 @@ app.post("/make-server-82b8c834/read-gauges", async (c) => {
     };
     check(parsed.hobbs, lastHobbs, "Hobbs");
     if (!parsed.warning) check(parsed.tach, lastTach, "Tach");
+
+    // Extrapolation fallback: if the photo was unreadable but history gives
+    // us a solid expectation, return the estimate (clearly flagged) instead
+    // of nothing. The pilot confirms or corrects it in the editable field.
+    const estimate = (
+      value: number | null,
+      exp: Expectation | null,
+      name: string,
+      set: (v: number) => void
+    ) => {
+      if (value !== null || !exp || exp.expected === null) return;
+      set(exp.expected);
+      parsed.confidence = "low";
+      const msg =
+        `Couldn't read the ${name} from the photo — pre-filled ${exp.expected.toFixed(1)} ` +
+        `(last reading ${exp.last.toFixed(1)} + your typical${destName ? ` ${destName}` : ""} trip). ` +
+        `Verify against the gauge before saving.`;
+      parsed.warning = parsed.warning ? `${parsed.warning} ${msg}` : msg;
+    };
+    if (target === "hobbs" || target === "both") {
+      estimate(parsed.hobbs, hobbsExp, "Hobbs", (v) => { parsed.hobbs = v; });
+    }
+    if (target === "tach" || target === "both") {
+      estimate(parsed.tach, tachExp, "Tach", (v) => { parsed.tach = v; });
+    }
 
     return c.json(parsed);
   } catch (error) {
