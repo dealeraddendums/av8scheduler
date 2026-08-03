@@ -40,6 +40,22 @@ Edge Function logs: Supabase dashboard → Functions → `make-server-82b8c834` 
   auto-deploys. Always run the `supabase functions deploy` command after
   editing `index.ts` or `kv_store.ts`.
 
+## Workflow — division of labor
+
+Allan's preference: **Claude Code (CC) executes everything possible.**
+Cowork/desktop sessions may edit code and commit locally, but all
+credentialed or shipping operations belong to CC:
+
+- `git push` (triggers web deploy via Actions)
+- Edge Function deploys (`supabase functions deploy …`)
+- EAS builds/submits (`eas build`, `eas submit`, credentials, 2FA)
+- Supabase dashboard SQL, verification of Actions runs
+
+When a Cowork session finishes code work, it hands Allan a short CC
+prompt to paste, rather than raw command blocks. CC should verify
+outcomes (Actions green, function deployed, build submitted) before
+reporting done.
+
 ## Conventions
 
 - Anon JWT is intentionally embedded in `packages/api/index.ts` — it's
