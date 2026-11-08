@@ -10,10 +10,15 @@ import {
 } from '@av8/api';
 import type { Flight, FlightTotals, LastReading, NewFlightInput, UpdateFlightInput } from '@av8/api';
 
+const PAGE_SIZE = 100;
+
 interface UseFlightsResult {
   flights: Flight[];
   totals: FlightTotals | null;
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
   error: string | null;
   refresh: () => Promise<void>;
   createFlight: (input: NewFlightInput) => Promise<Flight | null>;
@@ -27,30 +32,32 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
   const [flights, setFlights] = useState<Flight[]>([]);
   const [totals, setTotals] = useState<FlightTotals | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const buildPath = useCallback(
+    (offset: number) => {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+      if (pilotIdFilter) params.set('pilot_id', pilotIdFilter);
+      return `/flights?${params.toString()}`;
+    },
+    [pilotIdFilter]
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const flightsPath = pilotIdFilter
-        ? `/flights?pilot_id=${encodeURIComponent(pilotIdFilter)}`
-        : '/flights';
+      const flightsPath = buildPath(0);
       console.log('[useFlights] fetching', flightsPath, '+ /flights/totals');
       const [flightsData, totalsData] = await Promise.all([
         apiGet<Flight[]>(flightsPath),
         apiGet<FlightTotals>('/flights/totals'),
       ]);
-      console.log(
-        '[useFlights] response shape — flights:',
-        Array.isArray(flightsData) ? `array(${flightsData.length})` : typeof flightsData,
-        'totals:',
-        totalsData && typeof totalsData === 'object' ? 'object' : typeof totalsData
-      );
-      if (Array.isArray(flightsData) && flightsData.length > 0) {
-        console.log('[useFlights] first flight:', flightsData[0]);
-      }
-      setFlights(Array.isArray(flightsData) ? flightsData : []);
+      const list = Array.isArray(flightsData) ? flightsData : [];
+      setFlights(list);
+      setHasMore(list.length === PAGE_SIZE);
       setTotals(totalsData);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load flights';
@@ -60,7 +67,25 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
     } finally {
       setLoading(false);
     }
-  }, [pilotIdFilter]);
+  }, [buildPath]);
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    try {
+      const page = await apiGet<Flight[]>(buildPath(flights.length));
+      const list = Array.isArray(page) ? page : [];
+      setFlights((prev) => {
+        // Guard against duplicates if a flight was added between pages.
+        const seen = new Set(prev.map((f) => f.id));
+        return [...prev, ...list.filter((f) => !seen.has(f.id))];
+      });
+      setHasMore(list.length === PAGE_SIZE);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load more flights');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [buildPath, flights.length]);
 
   useEffect(() => {
     refresh();
@@ -147,5 +172,5 @@ export function useFlights(pilotIdFilter?: string): UseFlightsResult {
     }
   }, []);
 
-  return { flights, totals, loading, error, refresh, createFlight, updateFlight, deleteFlight, fetchLastReading, exportCSV };
+  return { flights, totals, loading, loadingMore, hasMore, loadMore, error, refresh, createFlight, updateFlight, deleteFlight, fetchLastReading, exportCSV };
 }

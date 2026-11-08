@@ -169,7 +169,11 @@ Routes added:
 - POST /flights (auto-computes hobbs_used + tach_used)
 - DELETE /flights/:id
 - POST /read-gauges (Claude vision → {hobbs, tach, confidence})
-- GET /flights/export?format=csv
+- GET /flights/export?format=csv (optional from/to date range, 2026-11-08)
+- GET /reports/usage?from&to (2026-11-08) — server-side per-pilot/per-month
+  aggregation for the Reports tab; `from=annual` resolves to the latest
+  annual in maintenance_events (falls back to KV baseline). Normalizes
+  legacy `user:`-prefixed pilot_ids.
 
 AI gauge-reading prompt:
 ```
@@ -304,6 +308,7 @@ Billing: integrate with existing da-billing at billing.dealeraddendums.com.
 | 2 | Web: FlightLog tab + all components | ✅ Done (2026-05-26) |
 | 3 | iOS: Expo monorepo + all screens | ✅ Scaffolded (2026-05-26) — auth, navigation, FlightLog/AddFlight/LogMaintenance/Admin screens, offline queue. expo-doctor: 21/21 checks pass. |
 | 4 | TestFlight build + distribution | ⏳ Pending manual steps (Allan): `eas login`, `eas build --platform ios --profile production` (NOT `preview` — internal dist can't submit to TestFlight), App Store Connect app creation (bundle ID `com.dealeraddendums.av8scheduler`), `eas submit --platform ios --latest`, add pilots as internal testers |
+| 5 | Web: Reports tab (per-pilot usage, presets incl. since-annual, recharts bar, month table, ranged CSV export) + flight-list pagination (was capped at 50) | ✅ Done (2026-11-08). Data fixes same day: Bob's 2026-02-27 negative delta corrected (Bob 0.5/1.2, Allan 2.7/1.6), one `user:user1` pilot_id normalized, stand-in annual (2026-01-01) inserted into maintenance_events |
 
 ---
 

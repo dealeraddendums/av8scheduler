@@ -1381,9 +1381,13 @@ app.get("/make-server-82b8c834/flights/export", async (c) => {
       return c.json({ error: "Only csv format supported" }, 400);
     }
 
-    const { data, error } = await supabase
-      .from("flights")
-      .select("*")
+    const from = parseIsoDateParam(c.req.query("from"));
+    const to = parseIsoDateParam(c.req.query("to"));
+
+    let query = supabase.from("flights").select("*");
+    if (from) query = query.gte("date", from);
+    if (to) query = query.lte("date", to);
+    const { data, error } = await query
       .order("date", { ascending: true })
       .order("created_at", { ascending: true });
     if (error) throw error;
@@ -1422,16 +1426,127 @@ app.get("/make-server-82b8c834/flights/export", async (c) => {
     }
     const csv = lines.join("\n");
 
+    const rangeSuffix = from || to ? `-${from ?? "start"}-to-${to ?? "latest"}` : "";
     return new Response(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="n4368v-flights.csv"',
+        "Content-Disposition": `attachment; filename="n4368v-flights${rangeSuffix}.csv"`,
       },
     });
-  } catch (error) {
-    console.log("Error exporting flights:", error);
-    return c.json({ error: `Failed to export flights: ${error}` }, 500);
+  } catch (err) {
+    console.error("Error exporting flights:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to export flights: ${msg}` }, 500);
+  }
+});
+
+// ── Reports ───────────────────────────────────────────────────
+
+function parseIsoDateParam(v: string | undefined): string | null {
+  if (!v) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+}
+
+/** flights.pilot_id should be raw ("user1"), but historical rows may carry the
+ *  KV-key prefix ("user:user1"). Normalize at the aggregation boundary. */
+function normalizePilotId(id: string): string {
+  return id.startsWith("user:") ? id.slice(5) : id;
+}
+
+/** Latest annual from maintenance_events, falling back to the KV baseline. */
+async function getLastAnnualDate(): Promise<string> {
+  const { data, error } = await supabase
+    .from("maintenance_events")
+    .select("date")
+    .eq("type", "annual")
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.date) return data.date as string;
+  const baseline = await getAnnualBaseline();
+  return baseline.date;
+}
+
+// GET /reports/usage?from=YYYY-MM-DD|annual&to=YYYY-MM-DD
+// Aggregates server-side so clients never pull the full flight list.
+app.get("/make-server-82b8c834/reports/usage", async (c) => {
+  try {
+    const last_annual_date = await getLastAnnualDate();
+
+    const fromRaw = c.req.query("from");
+    const from = fromRaw === "annual" ? last_annual_date : parseIsoDateParam(fromRaw);
+    const to = parseIsoDateParam(c.req.query("to"));
+
+    let query = supabase
+      .from("flights")
+      .select("date, pilot_id, pilot_name, hobbs_used, tach_used");
+    if (from) query = query.gte("date", from);
+    if (to) query = query.lte("date", to);
+    const { data, error } = await query.order("date", { ascending: true });
+    if (error) throw error;
+    const list = data ?? [];
+
+    const byPilot = new Map<
+      string,
+      { pilot_id: string; pilot_name: string; flights: number; hobbs: number; tach: number }
+    >();
+    const byMonth = new Map<string, Record<string, number>>();
+    let totalHobbs = 0;
+    let totalTach = 0;
+    let missingHobbs = 0;
+
+    for (const f of list) {
+      const pid = normalizePilotId(f.pilot_id);
+      const hu = Number(f.hobbs_used ?? 0);
+      const tu = Number(f.tach_used ?? 0);
+      if (f.hobbs_used === null || f.hobbs_used === undefined || hu === 0) missingHobbs += 1;
+      totalHobbs += hu;
+      totalTach += tu;
+
+      const p = byPilot.get(pid) ?? {
+        pilot_id: pid,
+        pilot_name: f.pilot_name,
+        flights: 0,
+        hobbs: 0,
+        tach: 0,
+      };
+      p.flights += 1;
+      p.hobbs += hu;
+      p.tach += tu;
+      byPilot.set(pid, p);
+
+      const month = String(f.date).slice(0, 7);
+      const m = byMonth.get(month) ?? {};
+      m[pid] = (m[pid] ?? 0) + hu;
+      byMonth.set(month, m);
+    }
+
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const by_pilot = Array.from(byPilot.values())
+      .map((p) => ({ ...p, hobbs: r1(p.hobbs), tach: r1(p.tach) }))
+      .sort((a, b) => b.hobbs - a.hobbs);
+    const by_month = Array.from(byMonth.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([month, pilots]) => ({
+        month,
+        pilots: Object.fromEntries(Object.entries(pilots).map(([k, v]) => [k, r1(v)])),
+      }));
+
+    return c.json({
+      from,
+      to,
+      last_annual_date,
+      by_pilot,
+      by_month,
+      totals: { flights: list.length, hobbs: r1(totalHobbs), tach: r1(totalTach) },
+      data_quality: { missing_or_zero_hobbs: missingHobbs },
+    });
+  } catch (err) {
+    console.error("Error computing usage report:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Failed to compute usage report: ${msg}` }, 500);
   }
 });
 

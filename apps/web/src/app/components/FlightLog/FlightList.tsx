@@ -22,6 +22,9 @@ interface FlightListProps {
   destinations: Destination[];
   pilots: { id: string; name: string; color: string }[];
   loading: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   isAdmin: boolean;
   onDelete: (id: string) => Promise<boolean> | void;
   onUpdate?: (id: string, updates: UpdateFlightInput) => Promise<Flight | null>;
@@ -69,6 +72,9 @@ export function FlightList({
   destinations,
   pilots,
   loading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
   isAdmin,
   onDelete,
   onUpdate,
@@ -307,6 +313,20 @@ export function FlightList({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {hasMore && onLoadMore && (
+        <div className="px-4 py-3 text-center" style={{ borderTop: BORDER }}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLoadMore}
+            disabled={!!loadingMore}
+            className="h-8 px-4 text-sm border-[rgba(78,81,102,0.2)] text-[#4E5166] hover:bg-[#f8f8f8]"
+          >
+            {loadingMore ? 'Loading…' : 'Load older entries'}
+          </Button>
         </div>
       )}
 

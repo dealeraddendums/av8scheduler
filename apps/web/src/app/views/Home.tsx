@@ -7,8 +7,9 @@ import { BookingsList } from '../components/BookingsList';
 import { LoginDialog } from '../components/LoginDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Calendar as CalendarIcon, List, RefreshCw, BookOpen } from 'lucide-react';
+import { Calendar as CalendarIcon, List, RefreshCw, BookOpen, BarChart3 } from 'lucide-react';
 import { FlightLog } from '../components/FlightLog';
+import { Reports } from '../components/Reports';
 import type { FlightTotals } from '@av8/api';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
@@ -712,7 +713,7 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="calendar" className="space-y-4">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-xl grid-cols-4">
             <TabsTrigger value="calendar" className="gap-2">
               <CalendarIcon className="w-4 h-4" />
               Calendar
@@ -724,6 +725,10 @@ export default function Home() {
             <TabsTrigger value="log" className="gap-2">
               <BookOpen className="w-4 h-4" />
               Flight Log
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Reports
             </TabsTrigger>
           </TabsList>
 
@@ -766,6 +771,10 @@ export default function Home() {
               loggedInUser={loggedInUser}
               onRequestLogin={() => setLoginDialogOpen(true)}
             />
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <Reports users={users} />
           </TabsContent>
         </Tabs>
       </main>

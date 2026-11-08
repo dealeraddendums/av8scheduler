@@ -143,6 +143,9 @@ export function FlightLog({ users, loggedInUser, onRequestLogin }: FlightLogProp
         destinations={destinationsHook.destinations}
         pilots={pilots}
         loading={flightsHook.loading || maintenanceHook.loading}
+        loadingMore={flightsHook.loadingMore}
+        hasMore={flightsHook.hasMore}
+        onLoadMore={flightsHook.loadMore}
         isAdmin={isAdmin}
         onDelete={flightsHook.deleteFlight}
         onUpdate={flightsHook.updateFlight}

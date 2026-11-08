@@ -117,6 +117,29 @@ export interface UpdateFlightInput {
   oil_added_qts?: number;
 }
 
+export interface UsageReportPilot {
+  pilot_id: string;
+  pilot_name: string;
+  flights: number;
+  hobbs: number;
+  tach: number;
+}
+
+export interface UsageReportMonth {
+  month: string; // "YYYY-MM"
+  pilots: Record<string, number>; // pilot_id → Hobbs hours
+}
+
+export interface UsageReport {
+  from: string | null;
+  to: string | null;
+  last_annual_date: string;
+  by_pilot: UsageReportPilot[];
+  by_month: UsageReportMonth[];
+  totals: { flights: number; hobbs: number; tach: number };
+  data_quality: { missing_or_zero_hobbs: number };
+}
+
 export interface NewMaintenanceInput {
   type: 'oil_change' | 'annual';
   pilot_id: string;
@@ -277,11 +300,29 @@ export async function readGauges(
   });
 }
 
+// ── Reports ──────────────────────────────────────────────────────────────
+
+/** Server-side aggregated usage report. `from` accepts "YYYY-MM-DD" or the
+ *  sentinel "annual" (server resolves it to the latest annual-inspection date). */
+export async function fetchUsageReport(from?: string, to?: string): Promise<UsageReport> {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const qs = params.toString();
+  return apiGet<UsageReport>(`/reports/usage${qs ? `?${qs}` : ''}`);
+}
+
 // ── CSV export ───────────────────────────────────────────────────────────
 
-/** Returns the CSV body as a string. Consumers convert to Blob/File and save. */
-export async function exportCSV(): Promise<string> {
-  const res = await fetch(`${API_BASE}/flights/export?format=csv`, { headers: authHeaders() });
+/** Returns the CSV body as a string. Consumers convert to Blob/File and save.
+ *  Optional from/to (YYYY-MM-DD) limit the export to a date range. */
+export async function exportCSV(from?: string, to?: string): Promise<string> {
+  const params = new URLSearchParams({ format: 'csv' });
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const res = await fetch(`${API_BASE}/flights/export?${params.toString()}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Export failed: ${res.status}`);
   return res.text();
 }
